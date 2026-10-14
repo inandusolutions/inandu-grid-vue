@@ -7,6 +7,12 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    # vue-tsc 3.x doesn't support TypeScript 7 yet (it requires typescript/lib/tsc, which TS 7
+    # no longer exports), so a TS major bump breaks `npm run typecheck`. Drop this once vue-tsc does.
+    ignore:
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
     groups:
@@ -46,6 +52,12 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # vue-tsc 3.x doesn't support TypeScript 7 yet (it requires typescript/lib/tsc, which TS 7
+    # no longer exports), so a TS major bump breaks `npm run typecheck`. Drop this once vue-tsc does.
+    ignore:
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
     groups:
