@@ -1,0 +1,72 @@
+version: 2
+updates:
+  # The library itself.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    groups:
+      # vue, its compiler packages and the type-checker must move in lockstep.
+      vue:
+        patterns:
+          - vue
+          - "@vue/*"
+          - vue-tsc
+      # vitest, @vitejs/plugin-vue and vite-plugin-dts peer-depend on vite.
+      vite:
+        patterns:
+          - vite
+          - vitest
+          - "@vitejs/*"
+          - vite-plugin-dts
+      dev-minor-patch:
+        dependency-type: development
+        exclude-patterns:
+          - vue
+          - "@vue/*"
+          - vue-tsc
+          - vite
+          - vitest
+          - "@vitejs/*"
+          - vite-plugin-dts
+        update-types:
+          - minor
+          - patch
+
+  # The GitHub Pages site and the StackBlitz example are consumer apps: one
+  # grouped PR per directory for minor/patch keeps the noise down.
+  - package-ecosystem: npm
+    directories:
+      - /site
+      - /examples/stackblitz
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+    groups:
+      vue:
+        patterns:
+          - vue
+          - "@vue/*"
+          - vue-tsc
+      minor-patch:
+        exclude-patterns:
+          - vue
+          - "@vue/*"
+          - vue-tsc
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies

@@ -1,0 +1,21 @@
+{
+  "name": "inandu-grid-vue-stackblitz-example",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimal Vue app using @inandu-solutions/grid-vue — the StackBlitz playground.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@inandu-solutions/grid-vue": "^0.1.0",
+    "jspdf": "^4.2.1",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.9",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.3"
+  }
+}
