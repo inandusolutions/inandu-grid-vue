@@ -9,6 +9,7 @@ import {
   type InanduGridCellPaste,
   type InanduGridColumn,
   type InanduGridRowSave,
+  type InanduGridServerQuery,
   type InanduHeaderRenderContext,
 } from '../composables/useInanduGrid';
 import { exportCsv, exportExcel, exportPdf, printTable } from '../utils/exporters';
@@ -117,6 +118,8 @@ const props = withDefaults(
     singleDetailExpand?: boolean;
     /** An extra per-row predicate ANDed onto the free-text + column filters — same as grid-angular's `extraRowFilter`. Lets a caller layer its own filtering (e.g. an advanced-filter query) on top of the grid's own. Unset: no extra filtering. */
     extraRowFilter?: (row: InanduGridRow) => boolean;
+    /** Server-side mode: `rows` is the current page as sorted/filtered/paged by the server and `totalItems` is the full match count. See `useInanduGridServer`. Needs `pageSize` > 0. */
+    serverSide?: { totalItems: number };
     /**
      * Opt-in row virtualization for large datasets — only rows scrolled into view (plus a small
      * overscan runway) are actually mounted. Bypasses pagination entirely, same as grouping.
@@ -155,6 +158,8 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+  /** `serverSide` only: on setup and whenever page, sort, filters or search change — feed it to `useInanduGridServer().setQuery`. */
+  queryChange: [query: InanduGridServerQuery];
   /** After every selection change, with the current full selection as an array (also once on mount). */
   selectionChange: [selectedRows: InanduGridRow[]];
   /** A row edit passed validation. The grid never mutates `rows` itself — applying `values` onto `row` is the caller's job. */
@@ -208,6 +213,8 @@ const grid = useInanduGrid(() => ({
   singleDetailExpand: props.singleDetailExpand,
   extraRowFilter: props.extraRowFilter,
   virtualScroll: props.virtualScroll,
+  serverSide: props.serverSide,
+  onQueryChange: query => emit('queryChange', query),
 }));
 
 /** The headless engine driving this grid — the same object `useInanduGrid()` returns — so a parent holding a template ref can sort/filter/pin/export programmatically or hand it to a grid-pro add-on. */
@@ -344,7 +351,7 @@ function selectedRangeText(r: RangeRect): string {
 }
 
 const aggregateColumns = computed(() => grid.visibleColumns.filter(column => column.aggregate));
-const groupableColumns = computed(() => grid.visibleColumns.filter(column => column.groupable !== false));
+const groupableColumns = computed(() => (props.serverSide ? [] : grid.visibleColumns.filter(column => column.groupable !== false))); // grouping would only see the current server page
 const isEmpty = computed(() => (grid.groups ? grid.groups.length === 0 : grid.visibleRows.length === 0));
 const hasRowActions = computed(() => grid.editableColumns.length > 0 || props.deletable || props.creatable);
 const hasRowDragHandle = computed(() => props.rowReorder && !grid.groupByField && !grid.hasVirtualScroll);
