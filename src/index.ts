@@ -2,7 +2,14 @@ export { default as InanduGrid } from './components/InanduGrid.vue';
 export type { InanduGridCellRangeSelection } from './components/types';
 
 export { useInanduGrid } from './composables/useInanduGrid';
+export { useInanduGridServer, buildInanduGridQuery } from './composables/useInanduGridServer';
 export type {
+  InanduGridServerOptions,
+  InanduGridServerResult,
+  InanduGridQueryOptions,
+} from './composables/useInanduGridServer';
+export type {
+  InanduGridServerQuery,
   InanduGridApi,
   InanduGridCellPaste,
   InanduGridColumn,

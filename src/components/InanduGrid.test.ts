@@ -846,3 +846,14 @@ describe('InanduGrid: cell range selection', () => {
     expect(container.querySelector('.inandu-cell-range-selected')).not.toBeInTheDocument();
   });
 });
+
+describe('<InanduGrid serverSide>', () => {
+  it('shows the rows it was given untouched, the server total in the pager, no group-by control, and emits queryChange', () => {
+    const wrapper = mount(InanduGrid, { props: { rows, columns, pageSize: 2, serverSide: { totalItems: 7 } } });
+
+    expect(wrapper.text()).toContain('Beatriz');
+    expect(wrapper.text()).toMatch(/Page 1 of 4 \(7\)/);
+    expect(wrapper.find('select[aria-label="Group by"]').exists()).toBe(false);
+    expect(wrapper.emitted('queryChange')?.[0]).toEqual([{ page: 0, pageSize: 2, sortCriteria: [], filterValues: {}, filterQuery: '' }]);
+  });
+});
