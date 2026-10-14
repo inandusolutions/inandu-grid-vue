@@ -1,0 +1,101 @@
+name: Publish to npm
+
+# Publishes @inandu-solutions/grid-vue to npm via trusted publishing (OIDC) — no npm token. npm
+# attaches a provenance attestation on its own once the repository is public (it can't for a
+# private one, which is why this doesn't pass --provenance: that flag would fail the publish).
+#
+# Runs on a pushed v* tag, or manually (Actions > Publish to npm > Run workflow) with the version
+# typed in.
+#
+# One-time setup. The package must exist on npm before a trusted publisher can be configured, so the
+# very first version is published by hand (`npm login` as an owner of the @inandu-solutions org, then
+# `npm publish --access public`). After that, on npmjs.com > the package > Settings > Trusted
+# Publisher > GitHub Actions:
+#   Organization or user: inandusolutions
+#   Repository:           inandu-grid-vue
+#   Workflow filename:    publish.yml
+#
+# Release flow: bump "version" in package.json (npm version <x.y.z> --no-git-tag-version), merge
+# that PR, then `git tag vX.Y.Z && git push origin vX.Y.Z` from main.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish — must match "version" in package.json (e.g. 0.2.0)'
+        required: true
+
+permissions:
+  contents: write   # create the GitHub Release after publishing
+  id-token: write   # required for npm trusted publishing + provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Resolve version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "publishing=$VERSION  package.json=$PKG_VERSION"
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Version $VERSION does not match \"version\": \"$PKG_VERSION\" in package.json — bump it first."
+            exit 1
+          fi
+
+      # Node 22 ships npm 10.x; trusted publishing needs npm >= 11.5.1.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1
+
+      - name: Check npm supports trusted publishing (>= 11.5.1)
+        run: |
+          npm --version
+          node -e "const [a,b,c]=process.argv[1].split('.').map(Number); if (a<11 || (a===11 && (b<5 || (b===5 && c<1)))) { console.error('npm >= 11.5.1 is required for trusted publishing'); process.exit(1); }" "$(npm --version)"
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        run: npm publish --access public
+
+      # The release notes come from the CHANGELOG.md section for this version when there is one,
+      # otherwise GitHub generates them from the merged PRs since the previous tag.
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "Release $TAG already exists"; exit 0; fi
+          NOTES=""
+          if [ -f CHANGELOG.md ]; then
+            NOTES=$(awk -v v="$VERSION" 'BEGIN{p=0} /^## \[/{ if (p) exit; if (index($0,"## [" v "]")==1) {p=1; next} } p{print}' CHANGELOG.md)
+          fi
+          if [ -n "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
+            printf '%s\n' "$NOTES" > "$RUNNER_TEMP/release-notes.md"
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          fi
