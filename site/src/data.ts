@@ -58,3 +58,23 @@ export const treeColumns: InanduGridColumn[] = [
   { field: 'role', headerText: 'Role' },
   { field: 'team', headerText: 'Team' },
 ];
+
+/** 10,000 synthetic orders for the virtual-scroll demo. */
+export function buildOrders(n = 10000): InanduGridRow[] {
+  const status = ['Paid', 'Pending', 'Shipped', 'Refunded'];
+  return Array.from({ length: n }, (_, i) => ({
+    id: i + 1,
+    customer: `${FIRST[i % FIRST.length]} ${LAST[(i * 7) % LAST.length]}`,
+    status: status[(i * 13) % status.length],
+    total: 20 + ((i * 7919) % 48000) / 100,
+    placed: new Date(2024, i % 12, 1 + (i % 27)),
+  }));
+}
+
+export const orderColumns: InanduGridColumn[] = [
+  { field: 'id', headerText: '#', type: 'number', width: 90 },
+  { field: 'customer', headerText: 'Customer' },
+  { field: 'status', headerText: 'Status' },
+  { field: 'total', headerText: 'Total', type: 'number', format: '1.2-2' },
+  { field: 'placed', headerText: 'Placed', type: 'date', format: 'DD/MM/YYYY' },
+];

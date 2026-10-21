@@ -3,6 +3,11 @@ import { shallowRef } from 'vue';
 import BasicsDemo from './BasicsDemo.vue';
 import EditingDemo from './EditingDemo.vue';
 import TreeDemo from './TreeDemo.vue';
+import DemoVirtual from './DemoVirtual.vue';
+import DemoSlots from './DemoSlots.vue';
+import FeatureExplorer from './FeatureExplorer.vue';
+import type { DemoTab } from './features';
+import { highlight } from './highlight';
 
 const NPM_INSTALL = 'npm install @inandu-solutions/grid-vue';
 
@@ -22,36 +27,14 @@ ${SCRIPT_CLOSE}
   <InanduGrid :rows="rows" :columns="columns" selectable exportable :page-size="25" />
 </template>`;
 
-const FEATURES: { title: string; body: string }[] = [
-  {
-    title: 'Sorting & filtering',
-    body: 'Single- or multi-column sort (shift-click), free-text search across every column, and per-column filter controls that match each column’s type.',
-  },
-  {
-    title: 'Grouping & aggregates',
-    body: 'Group by any column and see live sum / avg / min / max / count per group and grand totals — no extra wiring.',
-  },
-  {
-    title: 'CSV / Excel / PDF export',
-    body: 'One toolbar exports the visible rows. jspdf is lazy-loaded, so you only pay for the PDF path if someone uses it.',
-  },
-  {
-    title: 'Inline editing',
-    body: 'Per-column editable, with required / min / max / pattern and async validators checked at save time. Create and delete rows too.',
-  },
-  {
-    title: 'Columns, your way',
-    body: 'Resize, reorder, pin left or right, show/hide, and double-click a handle to autosize to content.',
-  },
-  {
-    title: 'i18n, slots & headless',
-    body: 'English, Spanish, French, Italian and Chinese bundled. Scoped slots for cells, headers, editors and detail rows — or skip the markup entirely with the useInanduGrid() composable.',
-  },
-];
-
-type DemoTab = 'basics' | 'editing' | 'tree';
+const USE_IT_HTML = highlight(USE_IT_SNIPPET);
 const tab = shallowRef<DemoTab>('basics');
 const copied = shallowRef(false);
+
+function openDemo(t: DemoTab) {
+  tab.value = t;
+  document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
+}
 
 function copyInstall() {
   navigator.clipboard?.writeText(NPM_INSTALL).then(() => {
@@ -75,8 +58,8 @@ function copyInstall() {
 
   <header id="top" class="hero">
     <div class="wrap">
-      <span class="badge">MIT licensed &middot; Vue 3 &middot; no enterprise tier</span>
-      <h1>The Vue data grid with nothing behind a paywall.</h1>
+      <span class="badge"><i class="dot" aria-hidden="true"></i>MIT licensed &middot; Vue 3 &middot; no enterprise tier</span>
+      <h1>The Vue data grid with <span class="hl">nothing behind a paywall</span>.</h1>
       <p class="lede">
         Sorting, filtering, grouping, virtual scroll, inline editing and CSV / Excel / PDF export — every feature on this page
         is free and open source. A component and a headless composable, both from day one.
@@ -95,6 +78,7 @@ function copyInstall() {
 
   <section id="demo">
     <div class="wrap">
+      <span class="eyebrow">Live demo</span>
       <h2>See it working</h2>
       <p class="demo-note">Not screenshots — the real component, running here.</p>
 
@@ -102,31 +86,33 @@ function copyInstall() {
         <button :class="['tab', { active: tab === 'basics' }]" type="button" @click="tab = 'basics'">Grid basics</button>
         <button :class="['tab', { active: tab === 'editing' }]" type="button" @click="tab = 'editing'">Inline editing</button>
         <button :class="['tab', { active: tab === 'tree' }]" type="button" @click="tab = 'tree'">Tree data</button>
+        <button :class="['tab', { active: tab === 'virtual' }]" type="button" @click="tab = 'virtual'">10,000 rows</button>
+        <button :class="['tab', { active: tab === 'slots' }]" type="button" @click="tab = 'slots'">Slots &amp; detail</button>
       </div>
 
       <div class="demo-panel">
         <BasicsDemo v-if="tab === 'basics'" />
         <EditingDemo v-else-if="tab === 'editing'" />
-        <TreeDemo v-else />
+        <TreeDemo v-else-if="tab === 'tree'" />
+        <DemoVirtual v-else-if="tab === 'virtual'" />
+        <DemoSlots v-else />
       </div>
     </div>
   </section>
 
-  <section id="features">
+  <section id="features" class="band">
     <div class="wrap">
-      <h2>Features</h2>
-      <div class="feature-grid">
-        <div v-for="f in FEATURES" :key="f.title" class="feature-card">
-          <h3>{{ f.title }}</h3>
-          <p>{{ f.body }}</p>
-        </div>
-      </div>
+      <span class="eyebrow">Features</span>
+      <h2>Everything on the list, free</h2>
+      <p class="section-lede">Pick a feature to see the code that turns it on. The real prop, event and slot names — copy, paste, done.</p>
+      <FeatureExplorer @open-demo="openDemo" />
     </div>
   </section>
 
   <section id="start">
     <div class="wrap">
-      <h2>Get started</h2>
+      <span class="eyebrow">Get started</span>
+      <h2>Two steps and a grid</h2>
       <div class="start-grid">
         <div>
           <h3>1 &middot; Install</h3>
@@ -134,7 +120,7 @@ function copyInstall() {
         </div>
         <div>
           <h3>2 &middot; Use it</h3>
-          <pre class="code-block">{{ USE_IT_SNIPPET }}</pre>
+          <pre class="code-block" v-html="USE_IT_HTML" />
         </div>
       </div>
       <div class="start-buttons">
