@@ -7,11 +7,17 @@ kept in sync feature-for-feature by hand (and with its React sibling,
 [`@inandu-solutions/grid-react`](https://github.com/inandusolutions/inandu-grid-react)).
 
 [![npm](https://img.shields.io/npm/v/@inandu-solutions/grid-vue.svg)](https://www.npmjs.com/package/@inandu-solutions/grid-vue)
+[![downloads](https://img.shields.io/npm/dm/@inandu-solutions/grid-vue.svg)](https://www.npmjs.com/package/@inandu-solutions/grid-vue)
 [![CI](https://github.com/inandusolutions/inandu-grid-vue/actions/workflows/ci.yml/badge.svg)](https://github.com/inandusolutions/inandu-grid-vue/actions/workflows/ci.yml)
+[![minzipped size](https://img.shields.io/bundlephobia/minzip/@inandu-solutions/grid-vue)](https://bundlephobia.com/package/@inandu-solutions/grid-vue)
 [![license](https://img.shields.io/npm/l/@inandu-solutions/grid-vue.svg)](LICENSE)
 ![Vue](https://img.shields.io/badge/Vue-3.4%2B-42b883)
 [![live demo](https://img.shields.io/badge/demo-live-1a8fae)](https://inandusolutions.github.io/inandu-grid-vue/)
 [![Open in StackBlitz](https://img.shields.io/badge/StackBlitz-open%20example-1389FD?logo=stackblitz&logoColor=white)](https://stackblitz.com/github/inandusolutions/inandu-grid-vue/tree/main/examples/stackblitz)
+
+[![inandu-grid-vue — free-text search filtering the grid live](docs/gifs/search-filter.gif)](https://inandusolutions.github.io/inandu-grid-vue/)
+
+<sub>Live free-text search on the demo grid. [Try every feature →](https://inandusolutions.github.io/inandu-grid-vue/)</sub>
 
 ## Try it in 30 seconds
 
@@ -69,6 +75,13 @@ export, virtual scroll, paged server-side mode) is included, free, no enterprise
 
 `@inandu-solutions/grid-pro-vue` *(private, paid, not released yet)* — the Vue port of
 `@inandu-solutions/grid-pro`, depends on this package the same way grid-pro depends on grid-angular.
+
+## See it
+
+Grouping and live free-text search — running in the [demo](https://inandusolutions.github.io/inandu-grid-vue/),
+which also has tabs for inline editing and tree data.
+
+[![grouping a column live in the demo grid](docs/gifs/grouping.gif)](https://inandusolutions.github.io/inandu-grid-vue/)
 
 ## Features
 
