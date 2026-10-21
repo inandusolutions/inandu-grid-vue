@@ -1,6 +1,6 @@
 {
   "name": "@inandu-solutions/grid-vue",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Standalone Vue 3 data grid: sorting, free-text and per-column filtering, grouping, pagination, CSV/Excel (.xls)/PDF export and print, i18n (5 languages) and theming, with a deliberately small dependency footprint. The Vue port of @inandu-solutions/grid-angular.",
   "keywords": [
     "vue",
