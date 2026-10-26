@@ -44,6 +44,28 @@ const editColumns: InanduGridColumn[] = [
 ];
 
 const basicsRows = people();
+
+const interactionColumns: InanduGridColumn[] = [
+  { field: 'name', headerText: 'Name', pinned: 'left', width: 200, editable: true },
+  { field: 'team', headerText: 'Team', width: 320 },
+  { field: 'role', headerText: 'Role', width: 320 },
+  { field: 'salary', headerText: 'Salary', type: 'number', format: '1.0-0', width: 320 },
+  { field: 'joined', headerText: 'Joined', type: 'date', format: 'DD/MM/YYYY', width: 320 },
+];
+const interactionRows = shallowRef<InanduGridRow[]>(people().slice(0, 6));
+const interactionLog = shallowRef('');
+function onRowOrderChange(next: InanduGridRow[]) {
+  interactionRows.value = next;
+  interactionLog.value = `order:${next.map(r => String(r['id'])).join(',')}`;
+}
+function onCellsPaste(updates: { row: InanduGridRow; field: string; value: unknown }[]) {
+  interactionRows.value = interactionRows.value.map(r => {
+    const mine = updates.filter(u => u.row === r);
+    return mine.length ? { ...r, ...Object.fromEntries(mine.map(u => [u.field, u.value])) } : r;
+  });
+  interactionLog.value = `paste:${updates.length}`;
+}
+const spanishRows = people().slice(0, 8);
 const editRows = shallowRef<InanduGridRow[]>(people().slice(0, 8));
 const log = shallowRef('');
 
@@ -102,6 +124,13 @@ const detailRows = orders(40);
       <InanduGrid :rows="editRows" :columns="editColumns" deletable creatable lang="en" @row-save="onRowSave" @row-create="onRowCreate" @row-delete="onRowDelete" />
       <output data-testid="log">{{ log }}</output>
     </template>
+
+    <template v-else-if="key === 'interactions'">
+      <InanduGrid :rows="interactionRows" :columns="interactionColumns" clipboard cell-range-selection row-reorder autosize lang="en" @row-order-change="onRowOrderChange" @cells-paste="onCellsPaste" />
+      <output data-testid="log">{{ interactionLog }}</output>
+    </template>
+
+    <InanduGrid v-else-if="key === 'es'" :rows="spanishRows" :columns="editColumns" exportable creatable deletable lang="es" />
 
     <InanduGrid v-else-if="key === 'tree'" :rows="treeRows" :columns="treeColumns" tree-children-key="reports" lang="en" />
 
