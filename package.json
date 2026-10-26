@@ -68,7 +68,8 @@
     "build": "vite build && node -e \"require('fs').copyFileSync('src/styles/inandu-grid.css','dist/style.css')\"",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "playwright test"
   },
   "peerDependencies": {
     "vue": "^3.4.0"
@@ -77,6 +78,7 @@
     "jspdf": "^4.2.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/vue": "^8.1.0",
     "@vitejs/plugin-vue": "^6.0.10",
