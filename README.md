@@ -107,7 +107,7 @@ composable — covers:
 - Master-detail — a `#detail="{ row }"` slot (or a `renderDetail` render-function prop)
 - Custom cell / header / edit-control rendering per column — `#cell-<field>`, `#header-<field>` and
   `#editor-<field>` scoped slots, or `renderCell` / `renderHeader` / `renderEditor` render functions
-  on the column definition — without losing sorting, resizing, or validation
+  on the column definition — without losing sorting, resizing, or validation. Note: the editor's `value` is always the raw control shape (text), so keep array/object cell values as delimited strings (or read `row[field]`) - see `InanduEditRenderContext`.
 - Excel-style cell range selection (`cell-range-selection`, `multi-range`) — click-and-drag or
   shift-click across cells to select a rectangular block; `Ctrl+C` copies the whole range as TSV
   when `clipboard` is also on
