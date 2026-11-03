@@ -1,8 +1,8 @@
 name: Publish to npm
 
-# Publishes @inandu-solutions/grid-vue to npm via trusted publishing (OIDC) — no npm token. npm
-# attaches a provenance attestation on its own once the repository is public (it can't for a
-# private one, which is why this doesn't pass --provenance: that flag would fail the publish).
+# Publishes @inandu-solutions/grid-vue to npm via trusted publishing (OIDC) — no npm token. The
+# repository is public, so the publish passes --provenance and the package gets a provenance
+# attestation.
 #
 # Runs on a pushed v* tag, or manually (Actions > Publish to npm > Run workflow) with the version
 # typed in.
@@ -78,8 +78,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish
-        run: npm publish --access public
+      - name: Publish (provenance)
+        run: npm publish --provenance --access public
 
       # The release notes come from the CHANGELOG.md section for this version when there is one,
       # otherwise GitHub generates them from the merged PRs since the previous tag.
