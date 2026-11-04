@@ -117,7 +117,7 @@ const props = withDefaults(
     renderDetail?: (row: InanduGridRow) => VNodeChild;
     /** Collapses any other expanded row first, accordion-style, when a new one expands. Off (any number of rows can be expanded at once) by default. */
     singleDetailExpand?: boolean;
-    /** An extra per-row predicate ANDed onto the free-text + column filters — same as grid-angular's `extraRowFilter`. Lets a caller layer its own filtering (e.g. an advanced-filter query) on top of the grid's own. Unset: no extra filtering. */
+    /** An extra per-row predicate ANDed onto the free-text + column filters — same as grid-angular's `extraRowFilter`. Lets a caller layer its own filtering (e.g. an advanced-filter query) on top of the grid's own. Unset: no extra filtering. Keep the function's identity stable (declare it once, or wrap it in `computed`): a new function on every parent render re-filters and re-sorts all rows each time. */
     extraRowFilter?: (row: InanduGridRow) => boolean;
     /**
      * How a row is identified across data refreshes: a field name (`'sku'`) or a function returning the key.
