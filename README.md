@@ -5,7 +5,8 @@ licence — row grouping, aggregates, inline editing and Excel-compatible export
 Vue port of [`@inandu-solutions/grid-angular`](https://github.com/inandusolutions/inandu-grid),
 on the same framework-agnostic core
 ([`@inandu-solutions/grid-core`](https://github.com/inandusolutions/inandu-grid-core)) as its Angular and
-React siblings: one core, three interfaces.
+React siblings: one core, three interfaces
+([how it fits together](https://inandusolutions.github.io/inandu-grid-vue/architecture.html)).
 
 <p align="center"><img src="https://raw.githubusercontent.com/inandusolutions/inandu-grid-core/main/docs/architecture.svg" alt="Angular, React and Vue grids on top of one shared core package, which shares its query contract with Inandu.Grid.Extensions on .NET" width="820"></p>
 
