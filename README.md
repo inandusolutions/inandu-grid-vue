@@ -3,7 +3,7 @@
 **A lightweight Vue 3 data grid with the essentials other grids gate behind a paid enterprise
 licence — row grouping, aggregates, inline editing and Excel-compatible export — fully MIT.** The
 Vue port of [`@inandu-solutions/grid-angular`](https://github.com/inandusolutions/inandu-grid),
-kept in sync feature-for-feature by hand (and with its React sibling,
+sharing its core, kept in sync by hand (and with its React sibling,
 [`@inandu-solutions/grid-react`](https://github.com/inandusolutions/inandu-grid-react)).
 
 [![npm](https://img.shields.io/npm/v/@inandu-solutions/grid-vue.svg)](https://www.npmjs.com/package/@inandu-solutions/grid-vue)
@@ -59,7 +59,7 @@ this isn't that — see [Not included](#not-included) below.
 
 ## Angular and React versions
 
-[`inandu-grid`](https://github.com/inandusolutions/inandu-grid) is the original, feature-complete,
+[`inandu-grid`](https://github.com/inandusolutions/inandu-grid) is the original, reference implementation,
 MIT-licensed Angular grid this repo is ported from, and
 [`inandu-grid-react`](https://github.com/inandusolutions/inandu-grid-react) is its React port — same
 feature set, same core logic, adapted for Vue's composition API (`computed`/`shallowRef`, SFCs,
@@ -85,7 +85,7 @@ which also has tabs for inline editing and tree data.
 
 ## Features
 
-**Feature-complete with grid-angular and grid-react.** The framework-agnostic core (sorting,
+**Covers the core feature set of grid-angular; a few Angular-only features are not ported (see the [feature matrix](https://github.com/inandusolutions/inandu-grid/blob/main/docs/feature-matrix.md)).** The framework-agnostic core (sorting,
 filtering, aggregation, export, i18n) is ported from grid-angular's
 [`core/`](https://github.com/inandusolutions/inandu-grid/tree/main/projects/inandu-grid/src/lib/core)
 folder and kept in sync by hand across the three repos. The Vue-specific layer — the
