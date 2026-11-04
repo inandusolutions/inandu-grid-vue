@@ -110,6 +110,19 @@ function copyInstall() {
     </div>
   </section>
 
+  <section id="architecture">
+    <div class="wrap">
+      <span class="eyebrow">Architecture</span>
+      <h2>One core, three interfaces</h2>
+      <p class="section-lede">Filtering, sorting, dates, parsing and export are not re-written per framework. They live in @inandu-solutions/grid-core, shared by the Angular, React and Vue grids, so a fix is made once and the three behave the same. Only the UI layer is framework code.</p>
+      <img class="arch-fig" src="https://raw.githubusercontent.com/inandusolutions/inandu-grid-core/main/docs/architecture.svg" alt="Angular, React and Vue grids on top of one shared core package, which shares its query contract with Inandu.Grid.Extensions on .NET" width="900" height="560" loading="lazy">
+      <p class="arch-cta">
+        <a class="btn solid" href="architecture.html">How it fits together</a>
+        <a class="btn" href="https://github.com/inandusolutions/inandu-grid-core">grid-core on GitHub</a>
+      </p>
+    </div>
+  </section>
+
   <section id="start">
     <div class="wrap">
       <span class="eyebrow">Get started</span>
