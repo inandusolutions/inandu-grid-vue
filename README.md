@@ -3,8 +3,11 @@
 **A lightweight Vue 3 data grid with the essentials other grids gate behind a paid enterprise
 licence — row grouping, aggregates, inline editing and Excel-compatible export — fully MIT.** The
 Vue port of [`@inandu-solutions/grid-angular`](https://github.com/inandusolutions/inandu-grid),
-sharing its core, kept in sync by hand (and with its React sibling,
-[`@inandu-solutions/grid-react`](https://github.com/inandusolutions/inandu-grid-react)).
+on the same framework-agnostic core
+([`@inandu-solutions/grid-core`](https://github.com/inandusolutions/inandu-grid-core)) as its Angular and
+React siblings: one core, three interfaces.
+
+<p align="center"><img src="https://raw.githubusercontent.com/inandusolutions/inandu-grid-core/main/docs/architecture.svg" alt="Angular, React and Vue grids on top of one shared core package, which shares its query contract with Inandu.Grid.Extensions on .NET" width="820"></p>
 
 [![npm](https://img.shields.io/npm/v/@inandu-solutions/grid-vue.svg)](https://www.npmjs.com/package/@inandu-solutions/grid-vue)
 [![downloads](https://img.shields.io/npm/dm/@inandu-solutions/grid-vue.svg)](https://www.npmjs.com/package/@inandu-solutions/grid-vue)
