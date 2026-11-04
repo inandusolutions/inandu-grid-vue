@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/vue';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { h } from 'vue';
@@ -141,12 +141,13 @@ describe('InanduGrid', () => {
 
   it('shows the MsgNoData message when there are no rows to show', () => {
     renderGrid({ rows: [], columns });
-    expect(screen.getByText('No data')).toBeInTheDocument();
+    // The live region repeats the message for screen readers, so look inside the table.
+    expect(within(screen.getByRole('table')).getByText('No data')).toBeInTheDocument();
   });
 
   it('translates built-in UI strings via the lang prop', () => {
     renderGrid({ rows: [], columns, lang: 'es', exportable: true });
-    expect(screen.getByText('Sin datos')).toBeInTheDocument();
+    expect(within(screen.getByRole('table')).getByText('Sin datos')).toBeInTheDocument();
     expect(screen.getByText('Exportar CSV')).toBeInTheDocument();
   });
 
@@ -855,5 +856,59 @@ describe('<InanduGrid serverSide>', () => {
     expect(wrapper.text()).toMatch(/Page 1 of 4 \(7\)/);
     expect(wrapper.find('select[aria-label="Group by"]').exists()).toBe(false);
     expect(wrapper.emitted('queryChange')?.[0]).toEqual([{ page: 0, pageSize: 2, sortCriteria: [], filterValues: {}, filterQuery: '' }]);
+  });
+});
+
+describe('InanduGrid accessibility', () => {
+  it('exposes the sort state on every column header', async () => {
+    renderGrid({ rows, columns });
+    const name = screen.getByRole('columnheader', { name: 'Sort by Name' });
+    const age = screen.getByRole('columnheader', { name: 'Sort by Age' });
+    expect(name).toHaveAttribute('aria-sort', 'none');
+
+    await fireEvent.click(name);
+    expect(name).toHaveAttribute('aria-sort', 'ascending');
+    expect(age).toHaveAttribute('aria-sort', 'none');
+
+    await fireEvent.click(name);
+    expect(name).toHaveAttribute('aria-sort', 'descending');
+  });
+
+  it('marks data rows as selected or not once the grid is selectable', async () => {
+    renderGrid({ rows, columns, selectable: true });
+    const dataRows = () => screen.getAllByRole('row').filter(r => r.hasAttribute('aria-selected'));
+    expect(dataRows().map(r => r.getAttribute('aria-selected'))).toEqual(['false', 'false']);
+
+    await fireEvent.click(screen.getAllByLabelText(/Select row/)[0]);
+    expect(dataRows().map(r => r.getAttribute('aria-selected')).sort()).toEqual(['false', 'true']);
+  });
+
+  it('does not set aria-selected when rows cannot be selected', () => {
+    renderGrid({ rows, columns });
+    expect(screen.getAllByRole('row').some(r => r.hasAttribute('aria-selected'))).toBe(false);
+  });
+
+  it('reports the full row count (two header rows included) only when the DOM holds part of the data', () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({ name: `N${i}`, age: i }));
+    const paged = renderGrid({ rows: many, columns, pageSize: 3 });
+    expect(paged.container.querySelector('table')).toHaveAttribute('aria-rowcount', '9');
+    paged.unmount();
+
+    const plain = renderGrid({ rows: many, columns });
+    expect(plain.container.querySelector('table')).not.toHaveAttribute('aria-rowcount');
+    plain.unmount();
+
+    const server = renderGrid({ rows: many.slice(0, 3), columns, pageSize: 3, serverSide: { totalItems: 120 } });
+    expect(server.container.querySelector('table')).toHaveAttribute('aria-rowcount', '122');
+  });
+
+  it('announces an empty result in a polite live region', async () => {
+    const { rerender } = renderGrid({ rows, columns });
+    const live = screen.getByRole('status');
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    expect(live).toHaveTextContent('');
+
+    await rerender({ rows: [], columns });
+    expect(screen.getByRole('status')).not.toHaveTextContent('');
   });
 });

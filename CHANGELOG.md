@@ -9,6 +9,17 @@ entries below start from the next release.
 
 ## [Unreleased]
 
-_Nothing yet_
+### Accessibility
+
+- Column headers expose `aria-sort` (`ascending` / `descending` / `none`).
+- Data rows expose `aria-selected` when the grid is `selectable`.
+- With `pageSize`, `virtualScroll` or `serverSide`, the table exposes `aria-rowcount` (both header rows
+  included), so assistive technology can say "row 3 of 240" although only a page is in the DOM.
+- A visually hidden polite live region (`role="status"`) announces an empty result. The message now appears
+  twice in the DOM (the visible cell and the live region): in your own tests, query it inside the table
+  (`within(screen.getByRole('table'))`).
+
+The table keeps its native `table` role on purpose: `role="grid"` promises arrow-key cell navigation, which this
+grid does not implement.
 
 [Unreleased]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.2.2...HEAD
