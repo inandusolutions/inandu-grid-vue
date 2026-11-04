@@ -20,6 +20,7 @@ import EditCell from './EditCell.vue';
 import FilterControl from './FilterControl.vue';
 import { RenderNodes, type RowContext } from './internal';
 import type { InanduGridCellRangeSelection } from './types';
+import type { InanduGridRowId } from '../composables/rowKey';
 
 /** An inclusive rectangle in `visibleRows`/`visibleColumns` coordinates. */
 interface RangeRect {
@@ -118,6 +119,13 @@ const props = withDefaults(
     singleDetailExpand?: boolean;
     /** An extra per-row predicate ANDed onto the free-text + column filters — same as grid-angular's `extraRowFilter`. Lets a caller layer its own filtering (e.g. an advanced-filter query) on top of the grid's own. Unset: no extra filtering. */
     extraRowFilter?: (row: InanduGridRow) => boolean;
+    /**
+     * How a row is identified across data refreshes: a field name (`'sku'`) or a function returning the key.
+     * Selection, tree and detail expansion are remembered by it, so they survive a server-side page change or
+     * `reload()` and a parent that passes a derived array; it is also the `:key` of the row. Unset: the row's
+     * `id` field when it has one, otherwise the row object itself (identity), as before.
+     */
+    rowId?: InanduGridRowId;
     /** Server-side mode: `rows` is the current page as sorted/filtered/paged by the server and `totalItems` is the full match count. See `useInanduGridServer`. Needs `pageSize` > 0. */
     serverSide?: { totalItems: number };
     /**
@@ -212,6 +220,7 @@ const grid = useInanduGrid(() => ({
   treeDefaultExpanded: props.treeDefaultExpanded,
   singleDetailExpand: props.singleDetailExpand,
   extraRowFilter: props.extraRowFilter,
+  rowId: props.rowId,
   virtualScroll: props.virtualScroll,
   serverSide: props.serverSide,
   onQueryChange: query => emit('queryChange', query),
@@ -530,8 +539,8 @@ function onTableKeyDown(event: KeyboardEvent) {
   }
 }
 
-function rowKey(row: InanduGridRow, fallback: string | number): string | number {
-  return row['id'] != null ? String(row['id']) : fallback;
+function rowKey(row: InanduGridRow): string {
+  return grid.rowKeyOf(row);
 }
 
 const rowCtx = computed<RowContext>(() => ({
@@ -719,7 +728,7 @@ const rowCtx = computed<RowContext>(() => ({
           <template v-else-if="grid.hasTreeData">
             <tr
               v-for="(node, index) in grid.treeRows"
-              :key="rowKey(node.row, index)"
+              :key="rowKey(node.row)"
               :aria-selected="selectable ? grid.isRowSelected(node.row) : undefined"
               :aria-level="node.depth + 1"
               :aria-expanded="node.expandable ? grid.isTreeRowExpanded(node.row) : undefined"
@@ -765,7 +774,7 @@ const rowCtx = computed<RowContext>(() => ({
               </tr>
               <DataRow
                 v-for="(row, index) in group.rows"
-                :key="rowKey(row, `${group.key}:${index}`)"
+                :key="rowKey(row)"
                 :ctx="rowCtx"
                 :row="row"
                 :row-index="index"
@@ -778,7 +787,7 @@ const rowCtx = computed<RowContext>(() => ({
             </tr>
             <DataRow
               v-for="(row, offset) in windowedRows"
-              :key="rowKey(row, windowStart + offset)"
+              :key="rowKey(row)"
               :ctx="rowCtx"
               :row="row"
               :row-index="windowStart + offset"
