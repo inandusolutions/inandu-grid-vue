@@ -353,6 +353,23 @@ function selectedRangeText(r: RangeRect): string {
 const aggregateColumns = computed(() => grid.visibleColumns.filter(column => column.aggregate));
 const groupableColumns = computed(() => (props.serverSide ? [] : grid.visibleColumns.filter(column => column.groupable !== false))); // grouping would only see the current server page
 const isEmpty = computed(() => (grid.groups ? grid.groups.length === 0 : grid.visibleRows.length === 0));
+
+/** `aria-sort` for a column header: the direction applied to `field`, or `none`. */
+function ariaSort(field: string): 'ascending' | 'descending' | 'none' {
+  const direction = grid.sortDirectionFor(field);
+  return direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none';
+}
+
+/**
+ * `aria-rowcount` (title row and filter row included) when the DOM holds only part of the data -
+ * paged, virtual or server-side - so assistive technology can say "row 3 of 240". `undefined`
+ * otherwise: the browser counts the rows that are really there.
+ */
+const ariaRowCount = computed(() =>
+  props.serverSide || (props.pageSize > 0 && !grid.groupByField) || grid.hasVirtualScroll
+    ? (props.serverSide ? props.serverSide.totalItems : grid.filteredRowCount) + 2
+    : undefined,
+);
 const hasRowActions = computed(() => grid.editableColumns.length > 0 || props.deletable || props.creatable);
 const hasRowDragHandle = computed(() => props.rowReorder && !grid.groupByField && !grid.hasVirtualScroll);
 const hasMasterDetail = computed(() => (!!slots.detail || !!props.renderDetail) && !grid.groupByField && !grid.hasVirtualScroll);
@@ -552,6 +569,7 @@ const rowCtx = computed<RowContext>(() => ({
 
 <template>
   <div class="inandu-grid-vue">
+    <div class="inandu-grid-sr-only" role="status" aria-live="polite">{{ isEmpty ? t('MsgNoData') : '' }}</div>
     <div class="inandu-grid-search">
       <input
         :aria-label="t('MsgFilterPlaceholder')"
@@ -614,7 +632,7 @@ const rowCtx = computed<RowContext>(() => ({
       :style="grid.hasVirtualScroll ? { height: `${height}px`, overflow: 'auto' } : undefined"
       @scroll="onViewportScroll"
     >
-      <table ref="tableRef" class="inandu-grid" @keydown="onTableKeyDown">
+      <table ref="tableRef" class="inandu-grid" :aria-rowcount="ariaRowCount" @keydown="onTableKeyDown">
         <thead>
           <tr>
             <th v-if="hasMasterDetail" />
@@ -632,6 +650,7 @@ const rowCtx = computed<RowContext>(() => ({
               v-for="column in grid.visibleColumns"
               :key="column.field"
               :data-field="column.field"
+              :aria-sort="ariaSort(column.field)"
               :style="columnStyle(column)"
               :class="dragOverField === column.field ? 'inandu-drag-over' : undefined"
               :draggable="column.reorder !== false"
@@ -701,6 +720,7 @@ const rowCtx = computed<RowContext>(() => ({
             <tr
               v-for="(node, index) in grid.treeRows"
               :key="rowKey(node.row, index)"
+              :aria-selected="selectable ? grid.isRowSelected(node.row) : undefined"
               :aria-level="node.depth + 1"
               :aria-expanded="node.expandable ? grid.isTreeRowExpanded(node.row) : undefined"
             >

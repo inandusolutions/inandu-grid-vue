@@ -60,6 +60,7 @@ function onCellMouseEnter(colIndex: number) {
 <template>
   <tr
     :data-row-index="rowIndex"
+    :aria-selected="ctx.selectable ? ctx.isRowSelected(row) : undefined"
     :class="isDragOverRow ? 'inandu-drag-over' : undefined"
     @dragover="onDragOver"
     @dragleave="hasRowDragHandle && emit('rowDragLeave')"
