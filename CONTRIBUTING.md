@@ -15,7 +15,7 @@
 | Path | What it is |
 | --- | --- |
 | `src/` | The library — published to npm as `@inandu-solutions/grid-vue`. |
-| `src/core/` | Framework-agnostic logic shared (by hand) with grid-angular and grid-react — no Vue imports. |
+| `src/core/` | Re-exports `@inandu-solutions/grid-core`, the framework-agnostic logic shared with grid-angular and grid-react. |
 | `src/composables/` | `useInanduGrid()`, the headless engine. |
 | `src/components/` | `<InanduGrid>` and its internal row/cell SFCs. |
 | `site/` | The GitHub Pages demo/landing site. A separate npm project, not part of the library build. |
@@ -49,8 +49,9 @@ npm run build        # library build -> dist/ (also copies dist/style.css)
 - [ ] Updated the README's Features list if the public API changed
 - [ ] If you touched core logic (sorting, filtering, aggregation, export, i18n), check whether the
   same change applies to the [Angular](https://github.com/inandusolutions/inandu-grid) and
-  [React](https://github.com/inandusolutions/inandu-grid-react) versions — the cores are kept in
-  sync by hand, not shared via a package
+  [React](https://github.com/inandusolutions/inandu-grid-react) versions — the core is shared through
+  [`@inandu-solutions/grid-core`](https://github.com/inandusolutions/inandu-grid-core), so a change to it
+  belongs in that repository
 
 ## Commit messages
 

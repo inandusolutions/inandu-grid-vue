@@ -13,7 +13,7 @@ export default defineConfig({
       fileName: 'inandu-grid-vue',
     },
     rollupOptions: {
-      external: ['vue', 'jspdf'],
+      external: ['vue', 'jspdf', '@inandu-solutions/grid-core'],
     },
   },
   test: {
