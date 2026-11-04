@@ -9,6 +9,8 @@ entries below start from the next release.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-04
+
 ### Accessibility
 
 - Column headers expose `aria-sort` (`ascending` / `descending` / `none`).
@@ -22,4 +24,5 @@ entries below start from the next release.
 The table keeps its native `table` role on purpose: `role="grid"` promises arrow-key cell navigation, which this
 grid does not implement.
 
-[Unreleased]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.2.2...v0.2.3
