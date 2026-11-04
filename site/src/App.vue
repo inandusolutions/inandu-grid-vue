@@ -51,6 +51,7 @@ function copyInstall() {
       <a href="#demo">Demo</a>
       <a href="#features">Features</a>
       <a href="#start">Get started</a>
+      <a href="architecture.html">Architecture</a>
       <a class="nav-icon" href="https://www.npmjs.com/package/@inandu-solutions/grid-vue" aria-label="npm">npm</a>
       <a class="nav-icon" href="https://github.com/inandusolutions/inandu-grid-vue" aria-label="GitHub">GitHub</a>
     </div>

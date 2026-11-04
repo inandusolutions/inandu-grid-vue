@@ -11,6 +11,12 @@ entries below start from the next release.
 
 ### Changed
 
+- The framework-agnostic core is now the `@inandu-solutions/grid-core` package (a dependency) instead of a copy in
+  `src/core`, shared with the Angular and React grids. With it come the fixes made there: a bare `yyyy-mm-dd` cell is
+  read as a local calendar day (it showed the previous day west of UTC), CSV cells that start with `=`, `+`, `-`,
+  `@`, a tab or a carriage return are prefixed with a quote so a spreadsheet does not run them as formulas, the
+  Excel export drops characters XML cannot carry, `downloadBlob` revokes its URL a second after the click, and tree
+  flattening terminates on cyclic data.
 - `useInanduGridServer` accepts its options as a plain object, a ref or a getter. `url` and `extraParams` are read on
   every request, and changing them requests the current query again, so a reactive tenant id or endpoint now works.
   A plain object behaves as before.
