@@ -9,6 +9,19 @@ entries below start from the next release.
 
 ## [Unreleased]
 
+### Changed
+
+- `useInanduGridServer` accepts its options as a plain object, a ref or a getter. `url` and `extraParams` are read on
+  every request, and changing them requests the current query again, so a reactive tenant id or endpoint now works.
+  A plain object behaves as before.
+- `extraParams` still replace a parameter of the same name that the grid sends (`page`, `pageSize`, `sort`, a column
+  filter), as before, but now log a one-time console warning for that key so an accidental collision is not silent.
+
+### Documentation
+
+- `extraRowFilter` now says that its identity must be stable: a new function on every parent render re-filters and
+  re-sorts all rows each time.
+
 ### Added
 
 - `rowId` (a field name or a function) on `<InanduGrid>` and `useInanduGrid`: selection, tree expansion and

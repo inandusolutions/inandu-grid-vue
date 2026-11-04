@@ -1,10 +1,12 @@
-import { onScopeDispose, shallowRef, watch, type ShallowRef } from 'vue';
+import { onScopeDispose, shallowRef, toValue, watch, type MaybeRefOrGetter, type ShallowRef } from 'vue';
 import { hasMeaningfulFilterValue } from '../core';
 import type { InanduGridRow } from '../core';
 import type { InanduGridServerQuery } from './useInanduGrid';
 
+const warnedExtraParams = new Set<string>();
+
 export interface InanduGridQueryOptions {
-  /** Extra params appended after the grid's own (a tenant id, a fixed filter, ...). */
+  /** Extra params appended after the grid's own (a tenant id, a fixed filter, ...). A key the grid already sends (`page`, `sort`, a column filter...) is replaced by yours, with a one-time console warning. */
   extraParams?: Record<string, string>;
 }
 
@@ -61,7 +63,15 @@ export function buildInanduGridQuery(query: InanduGridServerQuery, options: Inan
 
   if (repeatIn) params.set('inEncoding', 'repeat');
 
-  for (const [key, val] of Object.entries(options.extraParams ?? {})) params.set(key, val);
+  for (const [key, val] of Object.entries(options.extraParams ?? {})) {
+    // extraParams are applied last and win, on purpose (a tenant id, a forced page size...), but replacing one of the
+    // grid's own parameters by accident (`page`, `sort`, a column filter) is easy to miss, so say so once.
+    if (params.has(key) && !warnedExtraParams.has(key)) {
+      warnedExtraParams.add(key);
+      console.warn(`[inandu-grid] extraParams.${key} replaces the grid's own "${key}" query parameter.`);
+    }
+    params.set(key, val);
+  }
   return params;
 }
 
@@ -100,10 +110,15 @@ export interface InanduGridServerResult {
  *   :server-side="{ totalItems: server.total.value }" @query-change="server.setQuery" />
  * ```
  *
+ * `options` may be a plain object, a ref or a getter; `url` and `extraParams` are read on every request, and
+ * changing them requests the current query again.
+ *
  * Expects the `Inandu.Grid.Extensions` response shape, `{ data: [...], total: n }`. A request that
  * is superseded by a newer one is aborted, and a late response from it is ignored.
  */
-export function useInanduGridServer(options: InanduGridServerOptions): InanduGridServerResult {
+export function useInanduGridServer(optionsSource: MaybeRefOrGetter<InanduGridServerOptions>): InanduGridServerResult {
+  // Read at request time, so a ref or a getter works (a reactive `url` or `extraParams`), and so does a plain object.
+  const current = (): InanduGridServerOptions => toValue(optionsSource);
   const query = shallowRef<InanduGridServerQuery | undefined>(undefined);
   const rows = shallowRef<InanduGridRow[]>([]);
   const total = shallowRef(0);
@@ -122,6 +137,7 @@ export function useInanduGridServer(options: InanduGridServerOptions): InanduGri
       setLoading(true);
       error.value = undefined;
       try {
+        const options = current();
         const qs = buildInanduGridQuery(q, { extraParams: options.extraParams }).toString();
         const target = options.url + (options.url.includes('?') ? '&' : '?') + qs;
         const requestInit: RequestInit = { ...options.init, signal: controller.signal };
@@ -143,7 +159,7 @@ export function useInanduGridServer(options: InanduGridServerOptions): InanduGri
       loading.value = value;
     }
 
-    const delay = firstRequestDone ? (options.debounceMs ?? 200) : 0;
+    const delay = firstRequestDone ? (current().debounceMs ?? 200) : 0;
     firstRequestDone = true;
     const timer = setTimeout(run, delay);
     cancel = () => {
@@ -155,6 +171,17 @@ export function useInanduGridServer(options: InanduGridServerOptions): InanduGri
   watch([query, reloadToken], () => {
     if (query.value) schedule(query.value);
   });
+
+  // A reactive `url` or `extraParams` that changes asks for the same query again, against the new endpoint / params.
+  watch(
+    () => {
+      const o = current();
+      return `${o.url}|${JSON.stringify(o.extraParams ?? {})}`;
+    },
+    () => {
+      if (query.value) schedule(query.value);
+    },
+  );
   onScopeDispose(() => cancel?.(), true);
 
   return {

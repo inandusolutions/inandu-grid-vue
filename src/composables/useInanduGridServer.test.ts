@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { effectScope, nextTick } from 'vue';
+import { effectScope, nextTick, ref } from 'vue';
 import contract from './contract/server-queries.json';
 import { useInanduGrid, type InanduGridServerQuery } from './useInanduGrid';
 import { buildInanduGridQuery, useInanduGridServer } from './useInanduGridServer';
@@ -60,6 +60,73 @@ const until = async (cond: () => boolean) => {
   expect(cond()).toBe(true);
 };
 const inScope = <T>(fn: () => T) => effectScope().run(fn)!;
+
+describe('buildInanduGridQuery: extraParams colliding with a grid parameter', () => {
+  it('still lets extraParams win, and warns once per key', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const q: InanduGridServerQuery = { page: 0, pageSize: 25, sortCriteria: [], filterValues: {}, filterQuery: '' };
+
+    const first = buildInanduGridQuery(q, { extraParams: { pageSize: '1000' } });
+    buildInanduGridQuery(q, { extraParams: { pageSize: '1000' } });
+
+    expect(first.get('pageSize')).toBe('1000');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('pageSize');
+    warn.mockRestore();
+  });
+
+  it('does not warn for a key the grid does not send', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const q: InanduGridServerQuery = { page: 0, pageSize: 25, sortCriteria: [], filterValues: {}, filterQuery: '' };
+
+    buildInanduGridQuery(q, { extraParams: { tenant: 'acme' } });
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe('useInanduGridServer: reactive options', () => {
+  it('reads a ref at request time and requests again when url or extraParams change', async () => {
+    const fetcher = vi.fn(async (_url: string, _init: RequestInit) => ok([], 0));
+    const options = ref({ url: '/api/a', extraParams: { tenant: 'one' }, fetcher, debounceMs: 0 });
+    const server = inScope(() => useInanduGridServer(options));
+    server.setQuery(query(0));
+    await until(() => fetcher.mock.calls.length === 1);
+    expect(fetcher.mock.calls[0][0]).toBe('/api/a?page=1&pageSize=25&tenant=one');
+
+    options.value = { ...options.value, extraParams: { tenant: 'two' } };
+    await until(() => fetcher.mock.calls.length === 2);
+    expect(fetcher.mock.calls[1][0]).toBe('/api/a?page=1&pageSize=25&tenant=two');
+
+    options.value = { ...options.value, url: '/api/b' };
+    await until(() => fetcher.mock.calls.length === 3);
+    expect(fetcher.mock.calls[2][0]).toBe('/api/b?page=1&pageSize=25&tenant=two');
+  });
+
+  it('accepts a getter', async () => {
+    const fetcher = vi.fn(async (_url: string, _init: RequestInit) => ok([], 0));
+    const tenant = ref('one');
+    const server = inScope(() => useInanduGridServer(() => ({ url: '/api/p', extraParams: { tenant: tenant.value }, fetcher, debounceMs: 0 })));
+    server.setQuery(query(0));
+    await until(() => fetcher.mock.calls.length === 1);
+
+    tenant.value = 'two';
+    await until(() => fetcher.mock.calls.length === 2);
+    expect(fetcher.mock.calls[1][0]).toContain('tenant=two');
+  });
+
+  it('does not request before there is a query, even if the options change', async () => {
+    const fetcher = vi.fn(async (_url: string, _init: RequestInit) => ok([], 0));
+    const options = ref({ url: '/api/a', fetcher, debounceMs: 0 });
+    inScope(() => useInanduGridServer(options));
+
+    options.value = { ...options.value, url: '/api/b' };
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
 
 describe('useInanduGridServer', () => {
   it('requests with the contract query string and exposes data + total', async () => {
