@@ -9,7 +9,7 @@ entries below start from the next release.
 
 ## [Unreleased]
 
-Needs `@inandu-solutions/grid-core` with the print and state helpers (the release after 0.1.2).
+## [0.5.0] - 2026-11-05
 
 ### Added
 
@@ -108,6 +108,7 @@ Requires `@inandu-solutions/grid-core` ^0.1.2.
 The table keeps its native `table` role on purpose: `role="grid"` promises arrow-key cell navigation, which this
 grid does not implement.
 
-[Unreleased]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.4.0...v0.5.0
 [0.3.0]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/inandusolutions/inandu-grid-vue/compare/v0.2.2...v0.2.3
