@@ -1,6 +1,6 @@
 import { createRowKey, toVueKey } from './rowKey';
 import type { InanduGridRowId } from './rowKey';
-import { computed, shallowRef, toValue, watch, type MaybeRefOrGetter, type VNodeChild } from 'vue';
+import { computed, getCurrentInstance, onMounted, shallowRef, toValue, watch, type MaybeRefOrGetter, type VNodeChild } from 'vue';
 import {
   ColumnConfig,
   collectTreeRows,
@@ -19,6 +19,11 @@ import {
   MIN_COLUMN_WIDTH,
   parseDraftValue,
   parsePastedCell,
+  ALL_GRID_STATE_PARTS,
+  GRID_STATE_VERSION,
+  InanduGridStatePart,
+  sanitizeGridState,
+  STATE_STORAGE_PREFIX,
   SELECT_COLUMN_WIDTH,
   TreeVisibleRow,
 } from '../core';
@@ -217,6 +222,13 @@ export interface UseInanduGridOptions {
   serverSide?: { totalItems: number };
   /** `serverSide` only: called once on setup and again whenever page, sort, filters or search change. */
   onQueryChange?: (query: InanduGridServerQuery) => void;
+  /**
+   * When set, saves column widths/order/visibility/pins, sort and filters to `localStorage` under this key and restores
+   * them the next time a grid with the same key mounts (after mount, so server and client markup match). Unset: nothing is saved.
+   */
+  stateKey?: string;
+  /** Which parts of the state `stateKey` saves and restores; all by default. Leave out `'filterQuery'` and `'columnFilters'` to keep what was typed out of storage. */
+  persist?: readonly InanduGridStatePart[];
 }
 
 /**
@@ -273,6 +285,67 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
   const draggingRow = shallowRef<InanduGridRow | undefined>(undefined);
   const expandedTreeRows = shallowRef<Set<unknown>>(new Set());
   const expandedRows = shallowRef<Set<unknown>>(new Set());
+
+  // -- stateKey persistence -------------------------------------------------
+  // What is in storage may be stale, hand-edited or from another version: only the parts with the right shape and sizes
+  // get through (`sanitizeGridState`), never the raw parsed object.
+  const stateKey = computed(() => toValue(options).stateKey ?? '');
+  const persistParts = computed(() => toValue(options).persist ?? ALL_GRID_STATE_PARTS);
+  const stateRestored = shallowRef(false);
+  function restoreState(): void {
+    const key = stateKey.value;
+    if (key) {
+      try {
+        const stored = localStorage.getItem(STATE_STORAGE_PREFIX + key);
+        if (stored) {
+          const state = sanitizeGridState(JSON.parse(stored), persistParts.value);
+          if (state.columnWidths) columnWidths.value = state.columnWidths;
+          if (state.reorderedFields) reorderedFields.value = state.reorderedFields;
+          if (state.hiddenFields) hiddenFields.value = new Set(state.hiddenFields);
+          if (state.pinnedOverrides) pinnedOverrides.value = state.pinnedOverrides;
+          if (state.sortCriteria) sortCriteria.value = state.sortCriteria;
+          if (state.filterQuery !== undefined) filterQuery.value = state.filterQuery;
+          if (state.columnFilters) filterValues.value = state.columnFilters;
+        }
+      } catch {
+        // Corrupt state or no storage access: start fresh.
+      }
+    }
+    stateRestored.value = true;
+  }
+  if (getCurrentInstance()) onMounted(restoreState);
+  else restoreState();
+
+  watch([stateRestored, stateKey, persistParts, columnWidths, reorderedFields, hiddenFields, pinnedOverrides, sortCriteria, filterQuery, filterValues], () => {
+    const key = stateKey.value;
+    if (!key || !stateRestored.value) return;
+    try {
+      const wanted = new Set(persistParts.value);
+      const state: Record<string, unknown> = {
+        columnWidths: columnWidths.value,
+        reorderedFields: reorderedFields.value ?? [],
+        hiddenFields: Array.from(hiddenFields.value),
+        pinnedOverrides: pinnedOverrides.value,
+        sortCriteria: sortCriteria.value,
+        filterQuery: filterQuery.value,
+        columnFilters: filterValues.value,
+      };
+      const saved = Object.fromEntries(Object.entries(state).filter(([part]) => wanted.has(part as InanduGridStatePart)));
+      localStorage.setItem(STATE_STORAGE_PREFIX + key, JSON.stringify({ v: GRID_STATE_VERSION, ...saved }));
+    } catch {
+      // Persistence is a convenience, not a guarantee.
+    }
+  });
+
+  /** Removes what `stateKey` saved from `localStorage`; the grid on screen keeps its state. A no-op without a `stateKey`. */
+  function clearPersistedState(): void {
+    if (!stateKey.value) return;
+    try {
+      localStorage.removeItem(STATE_STORAGE_PREFIX + stateKey.value);
+    } catch {
+      // Nothing saved that could be cleared.
+    }
+  }
   // Keys of the tree nodes already offered the default expansion: a node is seeded once, when it first shows up.
   const treeSeen = new Set<unknown>();
 
@@ -1090,6 +1163,7 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
       return sortCriteria.value;
     },
     setSort,
+    clearPersistedState,
     toggleSort,
     sortDirectionFor,
     sortPriorityFor,
