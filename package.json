@@ -69,7 +69,9 @@
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test --project=chromium",
+    "e2e:all": "playwright test",
+    "check:dts": "tsc --noEmit --skipLibCheck false --strict --target es2022 --module esnext --moduleResolution bundler dist/index.d.ts"
   },
   "peerDependencies": {
     "vue": "^3.4.0",
