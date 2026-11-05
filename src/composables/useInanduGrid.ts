@@ -18,7 +18,7 @@ import {
   matchesColumnFilter,
   MIN_COLUMN_WIDTH,
   parseDraftValue,
-  parsePastedCellValue,
+  parsePastedCell,
   SELECT_COLUMN_WIDTH,
   TreeVisibleRow,
 } from '../core';
@@ -34,6 +34,8 @@ export interface InanduGridColumn {
   headerText?: string;
   type?: InanduColumnType;
   format?: string;
+  /** `'date'` columns: the zone dates are shown and filtered in: `'local'` (default), `'utc'` or an IANA name such as `'America/Bogota'`. */
+  timeZone?: string;
   order?: number;
   aggregate?: InanduColumnAggregate;
   /** Whether this column can be picked in the "group by" control. Default: true. */
@@ -118,6 +120,7 @@ function toColumnConfig(column: InanduGridColumn): ColumnConfig {
     format: () => column.format ?? '',
     order: () => column.order,
     aggregate: () => column.aggregate ?? '',
+    timeZone: () => column.timeZone,
   };
 }
 
@@ -393,7 +396,7 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
   function matchesQuery(row: InanduGridRow, query: string): boolean {
     return visibleColumns.value.some(column => {
       const config = columnConfigs.value.get(column.field)!;
-      return formatCellValue(row[column.field], config.type(), config.format(), locale.value).toLowerCase().includes(query);
+      return formatCellValue(row[column.field], config.type(), config.format(), locale.value, undefined, config.timeZone?.()).toLowerCase().includes(query);
     });
   }
 
@@ -406,7 +409,7 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
 
   function compareRows(a: InanduGridRow, b: InanduGridRow): number {
     for (const { field, direction } of sortCriteria.value) {
-      const cmp = compareCellValues(a[field], b[field], locale.value) * (direction === 'asc' ? 1 : -1);
+      const cmp = compareCellValues(a[field], b[field], { locale: locale.value, type: columnConfigs.value.get(field)?.type() }) * (direction === 'asc' ? 1 : -1);
       if (cmp !== 0) return cmp;
     }
     return 0;
@@ -444,7 +447,7 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
 
     const buckets = new Map<string, InanduGridRow[]>();
     for (const row of sortedFilteredRows.value) {
-      const key = formatCellValue(row[groupField], column.type(), column.format(), locale.value);
+      const key = formatCellValue(row[groupField], column.type(), column.format(), locale.value, undefined, column.timeZone?.());
       const bucket = buckets.get(key);
       if (bucket) bucket.push(row);
       else buckets.set(key, [row]);
@@ -880,7 +883,7 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
     const row = visibleRows.value[rowIndex];
     const column = columnConfigs.value.get(field);
     if (!row || !column) return '';
-    return formatCellValue(row[field], column.type(), column.format(), locale.value);
+    return formatCellValue(row[field], column.type(), column.format(), locale.value, undefined, column.timeZone?.());
   }
 
   /**
@@ -907,7 +910,8 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
       pastedRow.forEach((cellText, cOffset) => {
         const targetColumn = cols[colIndex + cOffset];
         if (!targetColumn || !targetColumn.editable) return;
-        updates.push({ row: targetRow, field: targetColumn.field, value: parsePastedCellValue(cellText, targetColumn.type ?? 'string') });
+        const parsed = parsePastedCell(cellText, targetColumn.type ?? 'string', { locale: locale.value });
+        if (parsed) updates.push({ row: targetRow, field: targetColumn.field, value: parsed.value });
       });
     });
     if (updates.length > 0) current().onCellsPaste?.(updates);
