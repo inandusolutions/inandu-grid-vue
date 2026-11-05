@@ -184,7 +184,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        vue: ['3.4', '3.5']
+        # @vue/test-utils 2.5 calls app.onUnmount (Vue 3.5 API), so the 3.4 run uses 2.4.6; the library itself is what is under test.
+        include:
+          - { vue: '3.4', utils: '2.4.6' }
+          - { vue: '3.5', utils: '2.5.1' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -196,7 +199,7 @@ jobs:
       - run: npm ci --ignore-scripts
 
       - name: Use Vue ${{ matrix.vue }}
-        run: npm install --no-save --ignore-scripts vue@~${{ matrix.vue }}.0
+        run: npm install --no-save --ignore-scripts vue@~${{ matrix.vue }}.0 @vue/test-utils@${{ matrix.utils }}
 
       - name: Unit tests
         run: npm test
