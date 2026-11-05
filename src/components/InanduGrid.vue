@@ -355,7 +355,7 @@ function selectedRangeText(r: RangeRect): string {
   const rangeRows = grid.visibleRows.slice(r.minRow, r.maxRow + 1);
   const rangeColumns = grid.visibleColumns.slice(r.minCol, r.maxCol + 1);
   return rangeRows
-    .map(row => rangeColumns.map(column => formatCellValue(row[column.field], column.type ?? 'string', column.format ?? '', props.locale)).join('\t'))
+    .map(row => rangeColumns.map(column => formatCellValue(row[column.field], column.type ?? 'string', column.format ?? '', props.locale, undefined, column.timeZone)).join('\t'))
     .join('\n');
 }
 
@@ -476,7 +476,7 @@ function cellContent(column: InanduGridColumn, row: InanduGridRow): VNodeChild {
   const slot = slots[`cell-${column.field}`];
   if (slot) return slot(ctx);
   if (column.renderCell) return column.renderCell(ctx);
-  return formatCellValue(row[column.field], column.type ?? 'string', column.format ?? '', props.locale);
+  return formatCellValue(row[column.field], column.type ?? 'string', column.format ?? '', props.locale, undefined, column.timeZone);
 }
 
 function editorContent(column: InanduGridColumn, row: InanduGridRow): VNodeChild | undefined {
