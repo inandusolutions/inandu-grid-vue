@@ -44,7 +44,7 @@ describe('InanduGrid', () => {
   it('sorts by a column on header click', async () => {
     renderGrid({ rows, columns });
     await fireEvent.click(screen.getByRole('columnheader', { name: 'Sort by Name' }));
-    const cells = screen.getAllByRole('cell');
+    const cells = screen.getAllByRole('gridcell');
     expect(cells[0]).toHaveTextContent('Ana');
   });
 
@@ -80,7 +80,7 @@ describe('InanduGrid', () => {
     await fireEvent.click(screen.getByRole('columnheader', { name: 'Sort by Age' })); // primary: age asc
     await fireEvent.click(screen.getByRole('columnheader', { name: 'Sort by Name' }), { shiftKey: true }); // secondary: name asc, ties broken
 
-    const cells = screen.getAllByRole('cell').map(cell => cell.textContent);
+    const cells = screen.getAllByRole('gridcell').map(cell => cell.textContent);
     // Beto(20) first, then the age-30 tie broken by name: Ana, Carla.
     expect(cells.slice(0, 6)).toEqual(['Beto', '20', 'Ana', '30', 'Carla', '30']);
     // Both sorted columns show their multi-sort priority badge.
@@ -142,12 +142,12 @@ describe('InanduGrid', () => {
   it('shows the MsgNoData message when there are no rows to show', () => {
     renderGrid({ rows: [], columns });
     // The live region repeats the message for screen readers, so look inside the table.
-    expect(within(screen.getByRole('table')).getByText('No data')).toBeInTheDocument();
+    expect(within(screen.getByRole('grid')).getByText('No data')).toBeInTheDocument();
   });
 
   it('translates built-in UI strings via the lang prop', () => {
     renderGrid({ rows: [], columns, lang: 'es', exportable: true });
-    expect(within(screen.getByRole('table')).getByText('Sin datos')).toBeInTheDocument();
+    expect(within(screen.getByRole('grid')).getByText('Sin datos')).toBeInTheDocument();
     expect(screen.getByText('Exportar CSV')).toBeInTheDocument();
   });
 
@@ -250,20 +250,25 @@ describe('InanduGrid', () => {
     expect(screen.getByText('Print')).toBeInTheDocument();
   });
 
-  it('prints via a new window with a plain table, and triggers the print dialog on it', async () => {
-    const printWindow = { document: { write: vi.fn(), close: vi.fn() }, focus: vi.fn(), print: vi.fn() };
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(printWindow as unknown as Window);
+  it('prints through a noopener blob page with a plain table that prints itself', async () => {
+    let page: Blob | undefined;
+    Object.assign(URL, {
+      createObjectURL: vi.fn((blob: Blob) => {
+        page = blob;
+        return 'blob:print';
+      }),
+      revokeObjectURL: vi.fn(),
+    });
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
 
     renderGrid({ rows, columns, exportable: true });
-    vi.useFakeTimers();
     await fireEvent.click(screen.getByText('Print'));
-    vi.runAllTimers();
 
-    expect(openSpy).toHaveBeenCalledWith('', '_blank');
-    expect(printWindow.document.write).toHaveBeenCalledWith(expect.stringContaining('Beatriz'));
-    expect(printWindow.print).toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith('blob:print', '_blank', 'noopener');
+    const html = await page!.text();
+    expect(html).toContain('Beatriz');
+    expect(html).toContain('print()');
 
-    vi.useRealTimers();
     openSpy.mockRestore();
   });
 
@@ -910,5 +915,147 @@ describe('InanduGrid accessibility', () => {
 
     await rerender({ rows: [], columns });
     expect(screen.getByRole('status')).not.toHaveTextContent('');
+  });
+});
+
+describe('InanduGrid: keyboard and assistive technology', () => {
+  it('is an ARIA grid whose rows and cells carry their roles', () => {
+    renderGrid({ rows, columns });
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('gridcell').length).toBeGreaterThan(0);
+  });
+
+  it('has a single tab stop: the first header cell', () => {
+    renderGrid({ rows, columns });
+    const stops = screen.getByRole('grid').querySelectorAll('[tabindex="0"]');
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toHaveTextContent('Name');
+  });
+
+  it('moves between cells with the arrow keys, Home and End', async () => {
+    renderGrid({ rows, columns });
+    const name = screen.getByRole('columnheader', { name: 'Sort by Name' });
+    name.focus();
+
+    await fireEvent.keyDown(name, { key: 'ArrowRight' });
+    expect(document.activeElement).toHaveTextContent('Age');
+    await fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' }); // the filter row is skipped
+    expect(document.activeElement).toHaveTextContent('41');
+    await fireEvent.keyDown(document.activeElement!, { key: 'ArrowLeft' });
+    expect(document.activeElement).toHaveTextContent('Beatriz');
+    await fireEvent.keyDown(document.activeElement!, { key: 'End' });
+    expect(document.activeElement).toHaveTextContent('41');
+    await fireEvent.keyDown(document.activeElement!, { key: 'Home' });
+    expect(document.activeElement).toHaveTextContent('Beatriz');
+    await fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+    expect(document.activeElement).toHaveTextContent('Ana');
+    await fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' });
+    expect(document.activeElement).toHaveTextContent('Beatriz');
+  });
+
+  it('sorts with Enter on a header cell, and keeps typing in a filter box out of the navigation', async () => {
+    renderGrid({ rows, columns });
+    const name = screen.getByRole('columnheader', { name: 'Sort by Name' });
+    name.focus();
+    await fireEvent.keyDown(name, { key: 'Enter' });
+    expect(name).toHaveAttribute('aria-sort', 'ascending');
+
+    const filter = screen.getAllByRole('textbox')[1];
+    filter.focus();
+    await fireEvent.keyDown(filter, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(filter);
+  });
+
+  it('announces loading and an error in the live region, and shows them in place of the rows', async () => {
+    const { rerender } = renderGrid({ rows, columns, loading: true });
+    expect(screen.getByRole('status')).toHaveTextContent('Loading');
+    expect(screen.queryByText('Beatriz')).not.toBeInTheDocument();
+
+    await rerender({ rows, columns, loading: true, error: 'Could not load' });
+    expect(screen.getByRole('status')).toHaveTextContent('Could not load');
+    expect(within(screen.getByRole('grid')).getByText('Could not load')).toBeInTheDocument();
+  });
+});
+
+describe('InanduGrid: API shared with grid-angular', () => {
+  it('sets id, dir, theme and width on the root', () => {
+    const { container } = renderGrid({ rows, columns, id: 'people', dir: 'rtl', theme: 'material', width: 600 });
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveAttribute('id', 'people');
+    expect(root).toHaveAttribute('dir', 'rtl');
+    expect(root).toHaveClass('inandu-theme-material');
+    expect(root.style.width).toBe('600px');
+  });
+
+  it('hides the search box with filter=false and uses filterPlaceholder', async () => {
+    const { rerender } = renderGrid({ rows, columns, filterPlaceholder: 'Find…' });
+    expect(screen.getByPlaceholderText('Find…')).toBeInTheDocument();
+    await rerender({ rows, columns, filter: false });
+    expect(screen.queryByPlaceholderText('Find…')).not.toBeInTheDocument();
+  });
+
+  it('merges customTranslations over the built-in texts', () => {
+    renderGrid({ rows: [], columns, customTranslations: { en: { MsgNoData: 'Nothing here' } } });
+    expect(within(screen.getByRole('grid')).getByText('Nothing here')).toBeInTheDocument();
+  });
+
+  it('hides the totals footer with showTotals=false', async () => {
+    const { container, rerender } = renderGrid({ rows: salesRows, columns: salesColumns });
+    expect(container.querySelector('tfoot')).not.toBeNull();
+    await rerender({ rows: salesRows, columns: salesColumns, showTotals: false });
+    expect(container.querySelector('tfoot')).toBeNull();
+  });
+
+  it('shows pinned rows above and below the data, outside of sorting and totals', () => {
+    const { container } = renderGrid({ rows, columns, pinnedTopRows: [{ name: 'TOP', age: 1 }], pinnedBottomRows: [{ name: 'BOTTOM', age: 2 }] });
+    const bodies = container.querySelectorAll('tbody');
+    expect(bodies).toHaveLength(3);
+    expect(bodies[0]).toHaveTextContent('TOP');
+    expect(bodies[1]).toHaveTextContent('Beatriz');
+    expect(bodies[2]).toHaveTextContent('BOTTOM');
+  });
+
+  it('reports sort and filter changes, but not the initial state', async () => {
+    const onSortChange = vi.fn();
+    const onFilterChange = vi.fn();
+    renderGrid({ rows, columns, onSortChange, onFilterChange });
+    expect(onSortChange).not.toHaveBeenCalled();
+    expect(onFilterChange).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByRole('columnheader', { name: 'Sort by Name' }));
+    await waitFor(() => expect(onSortChange).toHaveBeenCalledWith([{ field: 'name', direction: 'asc' }]));
+
+    await fireEvent.update(screen.getByLabelText('Search'), 'ana');
+    await waitFor(() => expect(onFilterChange).toHaveBeenLastCalledWith({ query: 'ana', columnFilters: {} }));
+  });
+});
+
+describe('InanduGrid: stateKey', () => {
+  const KEY = 'inandu-grid-state:vue-test';
+  afterEach(() => localStorage.removeItem(KEY));
+
+  it('saves the sort and restores it in a new grid with the same key', async () => {
+    const first = renderGrid({ rows, columns, stateKey: 'vue-test' });
+    await fireEvent.click(screen.getByRole('columnheader', { name: 'Sort by Name' }));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(KEY)!).sortCriteria).toEqual([{ field: 'name', direction: 'asc' }]));
+    first.unmount();
+
+    renderGrid({ rows, columns, stateKey: 'vue-test' });
+    await waitFor(() => expect(screen.getByRole('columnheader', { name: 'Sort by Name' })).toHaveAttribute('aria-sort', 'ascending'));
+  });
+
+  it('ignores a stored blob with the wrong shape', async () => {
+    localStorage.setItem(KEY, JSON.stringify({ sortCriteria: 'x', hiddenFields: { a: 1 }, columnFilters: 5 }));
+    renderGrid({ rows, columns, stateKey: 'vue-test' });
+    await Promise.resolve();
+    expect(screen.getByRole('columnheader', { name: 'Sort by Name' })).toHaveAttribute('aria-sort', 'none');
+  });
+
+  it('keeps the search text out of storage when persist leaves it out', async () => {
+    renderGrid({ rows, columns, stateKey: 'vue-test', persist: ['sortCriteria'] });
+    await fireEvent.update(screen.getByLabelText('Search'), 'secret');
+    await Promise.resolve();
+    expect(localStorage.getItem(KEY) ?? '').not.toContain('secret');
   });
 });

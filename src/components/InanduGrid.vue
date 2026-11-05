@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, useSlots, watch, type CSSProperties, type VNodeChild } from 'vue';
-import type { InanduGridColumnFilterValue, InanduGridRow } from '../core';
+import type { InanduGridColumnFilterValue, InanduGridRow, InanduGridStatePart } from '../core';
 import { AGGREGATE_SYMBOLS, formatCellValue, MAX_COLUMN_WIDTH } from '../core';
 import {
   useInanduGrid,
@@ -10,6 +10,7 @@ import {
   type InanduGridColumn,
   type InanduGridRowSave,
   type InanduGridServerQuery,
+  type InanduGridSort,
   type InanduHeaderRenderContext,
 } from '../composables/useInanduGrid';
 import { exportCsv, exportExcel, exportPdf, printTable } from '../utils/exporters';
@@ -153,11 +154,47 @@ const props = withDefaults(
      * the virtual window), not the full dataset. Default: false.
      */
     autosize?: boolean;
+    /** Shows a loading row in place of the data rows (and disables the export/print toolbar) while `true`. Default: false. */
+    loading?: boolean;
+    /** Shows this message in place of the data rows (and disables the export/print toolbar) when non-empty. Shown verbatim: translate it yourself. Wins over `loading`. */
+    error?: string;
+    /** Text direction of the grid. Default: `'ltr'`. */
+    dir?: 'ltr' | 'rtl' | 'auto';
+    /** Adds an `inandu-theme-{theme}` class to the root (`'material'`, `'dark'` and `'minimal'` are built in; any other name needs your own CSS). */
+    theme?: string;
+    /** The `id` of the root element; also the default base filename of the exports. */
+    id?: string;
+    /** Fixed width (px) of the root element. Unset: the container's width. */
+    width?: number;
+    /** Shows the search box. Default: true (grid-angular's is opt-in). */
+    filter?: boolean;
+    /** Placeholder of the search box. Default: the translated one. */
+    filterPlaceholder?: string;
+    /** Shows the totals footer for the columns with an `aggregate`. Default: true (grid-angular's is opt-in). */
+    showTotals?: boolean;
+    /** Overrides built-in texts per language: `{ es: { MsgNoData: 'Nada' } }`. Merged over the built-in dictionary. */
+    customTranslations?: Record<string, Record<string, string>>;
+    /** Saves column widths/order/visibility/pins, sort and filters to `localStorage` under this key and restores them on mount. See `useInanduGrid`. */
+    stateKey?: string;
+    /** Which parts of the state `stateKey` saves; all by default. Leave out `'filterQuery'` and `'columnFilters'` to keep typed text out of storage. */
+    persist?: readonly InanduGridStatePart[];
+    /** Rows shown above the data rows, outside of filtering, sorting, paging and totals (a summary row you computed yourself). Read-only. */
+    pinnedTopRows?: InanduGridRow[];
+    /** Rows shown below the data rows, with the same rules as `pinnedTopRows`. */
+    pinnedBottomRows?: InanduGridRow[];
   }>(),
   {
     locale: 'en',
     pageSize: 0,
-    exportFilenameBase: 'inandu-grid',
+    exportFilenameBase: undefined,
+    loading: false,
+    error: '',
+    dir: 'ltr',
+    theme: '',
+    filter: true,
+    showTotals: true,
+    pinnedTopRows: () => [],
+    pinnedBottomRows: () => [],
     treeDefaultExpanded: 'none',
     virtualRowHeight: 40,
     height: 400,
@@ -186,6 +223,12 @@ const emit = defineEmits<{
   cellRangesChange: [selections: InanduGridCellRangeSelection[]];
   /** The fully reordered row array after a row drag-and-drop. The grid never mutates `rows` itself. */
   rowOrderChange: [rows: InanduGridRow[]];
+  /** The sort changed (not emitted on mount). An empty array means "no sort". */
+  sortChange: [criteria: InanduGridSort[]];
+  /** The search text or a column filter changed (not emitted on mount). */
+  filterChange: [state: { query: string; columnFilters: Record<string, InanduGridColumnFilterValue> }];
+  /** The page changed (not emitted on mount). `page` is 0-based. */
+  pageChange: [state: { page: number; pageSize: number }];
 }>();
 
 defineSlots<{
@@ -224,16 +267,24 @@ const grid = useInanduGrid(() => ({
   virtualScroll: props.virtualScroll,
   serverSide: props.serverSide,
   onQueryChange: query => emit('queryChange', query),
+  stateKey: props.stateKey,
+  persist: props.persist,
 }));
 
 /** The headless engine driving this grid — the same object `useInanduGrid()` returns — so a parent holding a template ref can sort/filter/pin/export programmatically or hand it to a grid-pro add-on. */
 defineExpose({ grid });
 
-const t = computed(() => createTranslator(props.lang ?? props.locale));
+const t = computed(() => createTranslator(props.lang ?? props.locale, props.customTranslations));
+const exportBase = computed(() => props.exportFilenameBase ?? (props.id || 'inandu-grid'));
 const dragOverField = shallowRef<string | undefined>(undefined);
 const dragOverRow = shallowRef<InanduGridRow | undefined>(undefined);
 const scrollTop = shallowRef(0);
 const tableRef = shallowRef<HTMLTableElement | null>(null);
+
+// sort / filter / page notifications: only on a change, never for the initial state.
+watch(() => grid.sortCriteria, criteria => emit('sortChange', criteria));
+watch([() => grid.filterQuery, () => grid.filterValues], ([query, columnFilters]) => emit('filterChange', { query, columnFilters }));
+watch(() => grid.page, page => emit('pageChange', { page, pageSize: props.pageSize }));
 
 watch(
   () => grid.selectedRows,
@@ -504,6 +555,74 @@ function onColumnToggle(event: Event, field: string) {
 }
 
 /**
+ * Keyboard model of the ARIA grid pattern, the same as grid-angular's: the grid is one tab stop (the first header cell),
+ * the arrow keys move between cells (Home/End within the row, Ctrl+Home/Ctrl+End to the first/last cell, PageUp/PageDown
+ * ten rows) and Enter or Space on a header cell sorts by it (Shift adds the column to the sort). Ignored while focus is
+ * in a control inside a cell, so typing and arrows in an input keep working.
+ */
+function handleGridNavigation(event: KeyboardEvent): boolean {
+  const key = event.key;
+  const target = event.target as HTMLElement;
+  const cell = target.closest<HTMLElement>('[role="columnheader"], [role="gridcell"]');
+  if (!cell || target !== cell) return false; // focus is on a control inside the cell, not on the cell
+
+  if ((key === 'Enter' || key === ' ') && cell.getAttribute('role') === 'columnheader') {
+    const field = cell.getAttribute('data-field');
+    if (!field) return false;
+    event.preventDefault();
+    grid.toggleSort(field, event.shiftKey);
+    return true;
+  }
+  if (!['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(key)) return false;
+
+  const row = cell.closest('tr');
+  const table = cell.closest('table');
+  if (!row || !table) return false;
+  const cellsOf = (tr: Element) => Array.from(tr.querySelectorAll<HTMLElement>('[role="columnheader"], [role="gridcell"]'));
+  const rows = Array.from(table.querySelectorAll<HTMLElement>('tr[role="row"]:not([aria-hidden="true"]):not(.inandu-grid-filter-row)')).filter(tr => cellsOf(tr).length > 0);
+  const rowIndex = rows.indexOf(row as HTMLElement);
+  const cells = cellsOf(row);
+  const colIndex = cells.indexOf(cell);
+  const at = (r: number, c: number) => cellsOf(rows[Math.min(rows.length - 1, Math.max(0, r))] ?? row)[c];
+
+  let next: HTMLElement | undefined;
+  switch (key) {
+    case 'ArrowRight':
+      next = cells[colIndex + 1];
+      break;
+    case 'ArrowLeft':
+      next = cells[colIndex - 1];
+      break;
+    case 'Home':
+      next = event.ctrlKey ? at(0, 0) : cells[0];
+      break;
+    case 'End': {
+      const last = cellsOf(event.ctrlKey ? rows[rows.length - 1] : row);
+      next = last[event.ctrlKey ? last.length - 1 : cells.length - 1];
+      break;
+    }
+    case 'ArrowUp':
+      next = rowIndex > 0 ? at(rowIndex - 1, colIndex) : undefined;
+      break;
+    case 'ArrowDown':
+      next = rowIndex < rows.length - 1 ? at(rowIndex + 1, colIndex) : undefined;
+      break;
+    case 'PageUp':
+      next = rowIndex > 0 ? at(rowIndex - 10, colIndex) : undefined;
+      break;
+    case 'PageDown':
+      next = rowIndex < rows.length - 1 ? at(rowIndex + 10, colIndex) : undefined;
+      break;
+  }
+  if (!next) return false;
+  event.preventDefault();
+  cell.tabIndex = -1;
+  next.tabIndex = 0;
+  next.focus();
+  return true;
+}
+
+/**
  * The `Ctrl+C`/`Ctrl+V` half of grid-angular's `handleClipboardShortcut` — resolves the focused
  * cell via the `data-row-index`/`data-field` attributes each `<td>`/`<tr>` carries (only in the
  * flat, non-grouped render path, same restriction), then defers to `copyCellText()`/`pasteAt()`.
@@ -511,6 +630,7 @@ function onColumnToggle(event: Event, field: string) {
  * text* there should win, not a whole-cell copy/paste.
  */
 function onTableKeyDown(event: KeyboardEvent) {
+  if (handleGridNavigation(event)) return;
   if (!props.clipboard || !(event.ctrlKey || event.metaKey)) return;
   const key = event.key.toLowerCase();
   if (key !== 'c' && key !== 'v') return;
@@ -577,23 +697,29 @@ const rowCtx = computed<RowContext>(() => ({
 </script>
 
 <template>
-  <div class="inandu-grid-vue">
-    <div class="inandu-grid-sr-only" role="status" aria-live="polite">{{ isEmpty ? t('MsgNoData') : '' }}</div>
-    <div class="inandu-grid-search">
+  <div
+    :id="id || undefined"
+    :dir="dir"
+    :class="theme ? `inandu-grid-vue inandu-theme-${theme}` : 'inandu-grid-vue'"
+    :style="width ? { width: `${width}px` } : undefined"
+  >
+    <!-- What a sighted user sees without moving focus: an error, loading, or an empty result. -->
+    <div class="inandu-grid-sr-only" role="status" aria-live="polite">{{ error || (loading ? t('MsgLoading') : isEmpty ? t('MsgNoData') : '') }}</div>
+    <div v-if="filter" class="inandu-grid-search">
       <input
-        :aria-label="t('MsgFilterPlaceholder')"
+        :aria-label="filterPlaceholder || t('MsgFilterPlaceholder')"
         type="text"
-        :placeholder="`${t('MsgFilterPlaceholder')}…`"
+        :placeholder="filterPlaceholder ?? `${t('MsgFilterPlaceholder')}…`"
         :value="grid.filterQuery"
         @input="grid.setFilterQuery(($event.target as HTMLInputElement).value)"
       />
     </div>
     <div class="inandu-grid-toolbar">
       <template v-if="exportable">
-        <button type="button" @click="exportCsv(grid.exportRows, grid.visibleColumns, locale, exportFilenameBase)">{{ t('MsgExportCsv') }}</button>
-        <button type="button" @click="exportExcel(grid.exportRows, grid.visibleColumns, locale, exportFilenameBase)">{{ t('MsgExportExcel') }}</button>
-        <button type="button" @click="void exportPdf(grid.exportRows, grid.visibleColumns, locale, exportFilenameBase)">{{ t('MsgExportPdf') }}</button>
-        <button type="button" @click="printTable(grid.exportRows, grid.visibleColumns, locale, exportFilenameBase)">{{ t('MsgPrint') }}</button>
+        <button type="button" :disabled="loading || !!error" @click="exportCsv(grid.exportRows, grid.visibleColumns, locale, exportBase)">{{ t('MsgExportCsv') }}</button>
+        <button type="button" :disabled="loading || !!error" @click="exportExcel(grid.exportRows, grid.visibleColumns, locale, exportBase)">{{ t('MsgExportExcel') }}</button>
+        <button type="button" :disabled="loading || !!error" @click="void exportPdf(grid.exportRows, grid.visibleColumns, locale, exportBase)">{{ t('MsgExportPdf') }}</button>
+        <button type="button" :disabled="loading || !!error" @click="printTable(grid.exportRows, grid.visibleColumns, locale, exportBase)">{{ t('MsgPrint') }}</button>
       </template>
       <button v-if="creatable && grid.editableColumns.length > 0 && !grid.isAddingRow" type="button" @click="grid.startAddingRow()">
         {{ t('MsgAddRow') }}
@@ -641,12 +767,12 @@ const rowCtx = computed<RowContext>(() => ({
       :style="grid.hasVirtualScroll ? { height: `${height}px`, overflow: 'auto' } : undefined"
       @scroll="onViewportScroll"
     >
-      <table ref="tableRef" class="inandu-grid" :aria-rowcount="ariaRowCount" @keydown="onTableKeyDown">
+      <table ref="tableRef" class="inandu-grid" role="grid" :aria-rowcount="ariaRowCount" @keydown="onTableKeyDown">
         <thead>
-          <tr>
-            <th v-if="hasMasterDetail" />
-            <th v-if="hasRowDragHandle" />
-            <th v-if="selectable" :style="selectColumnStyle">
+          <tr role="row">
+            <th role="columnheader" v-if="hasMasterDetail" />
+            <th role="columnheader" v-if="hasRowDragHandle" />
+            <th role="columnheader" v-if="selectable" tabindex="0" :style="selectColumnStyle">
               <input
                 :aria-label="t('MsgSelectAll')"
                 type="checkbox"
@@ -655,10 +781,11 @@ const rowCtx = computed<RowContext>(() => ({
                 @change="grid.toggleSelectAll()"
               />
             </th>
-            <th
-              v-for="column in grid.visibleColumns"
+            <th role="columnheader"
+              v-for="(column, colIndex) in grid.visibleColumns"
               :key="column.field"
               :data-field="column.field"
+              :tabindex="colIndex === 0 && !selectable ? 0 : -1"
               :aria-sort="ariaSort(column.field)"
               :style="columnStyle(column)"
               :class="dragOverField === column.field ? 'inandu-drag-over' : undefined"
@@ -683,23 +810,34 @@ const rowCtx = computed<RowContext>(() => ({
                 @click.stop
               />
             </th>
-            <th v-if="hasRowActions" />
+            <th role="columnheader" v-if="hasRowActions" />
           </tr>
-          <tr class="inandu-grid-filter-row">
-            <th v-if="hasMasterDetail" />
-            <th v-if="hasRowDragHandle" />
-            <th v-if="selectable" :style="selectColumnStyle" />
-            <th v-for="column in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
+          <tr role="row" class="inandu-grid-filter-row">
+            <th role="columnheader" v-if="hasMasterDetail" />
+            <th role="columnheader" v-if="hasRowDragHandle" />
+            <th role="columnheader" v-if="selectable" :style="selectColumnStyle" />
+            <th role="columnheader" v-for="column in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
               <FilterControl :column="column" :value="grid.filterValues[column.field]" :t="t" @change="patch => patchFilterValue(column.field, patch)" />
             </th>
-            <th v-if="hasRowActions" />
+            <th role="columnheader" v-if="hasRowActions" />
           </tr>
         </thead>
+        <tbody v-if="pinnedTopRows.length > 0 && !grid.hasVirtualScroll" class="inandu-grid-pinned inandu-grid-pinned-top">
+          <tr v-for="(pinned, index) in pinnedTopRows" :key="`top-${index}`" role="row" class="inandu-grid-pinned-row">
+            <td v-if="hasMasterDetail" role="gridcell" />
+            <td v-if="hasRowDragHandle" role="gridcell" />
+            <td v-if="selectable" role="gridcell" :style="selectColumnStyle" />
+            <td v-for="column in grid.visibleColumns" :key="column.field" role="gridcell" tabindex="-1" :style="columnStyle(column)">
+              <RenderNodes :nodes="cellContent(column, pinned)" />
+            </td>
+            <td v-if="hasRowActions" role="gridcell" />
+          </tr>
+        </tbody>
         <tbody>
           <!-- The blank draft row shown above the data while `creatable`'s "Add row" trigger is active — every editable field starts empty, nothing needs seeding (unlike editing an existing row). -->
-          <tr v-if="grid.isAddingRow" class="inandu-grid-new-row">
-            <td v-if="selectable" :style="selectColumnStyle" />
-            <td v-for="column in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
+          <tr role="row" v-if="grid.isAddingRow" class="inandu-grid-new-row">
+            <td role="gridcell" v-if="selectable" :style="selectColumnStyle" />
+            <td role="gridcell" v-for="column in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
               <template v-if="column.editable">
                 <RenderNodes v-if="editorContent(column, {}) !== undefined" :nodes="editorContent(column, {})" />
                 <EditCell
@@ -712,13 +850,19 @@ const rowCtx = computed<RowContext>(() => ({
                 />
               </template>
             </td>
-            <td v-if="hasRowActions" class="inandu-grid-row-actions">
+            <td role="gridcell" v-if="hasRowActions" class="inandu-grid-row-actions">
               <button type="button" :disabled="grid.isValidating" @click="void grid.saveNewRow()">{{ t('MsgSaveRow') }}</button>
               <button type="button" :disabled="grid.isValidating" @click="grid.cancelAddRow()">{{ t('MsgCancelRowEdit') }}</button>
             </td>
           </tr>
-          <tr v-if="isEmpty">
-            <td :colspan="totalColumnCount">{{ t('MsgNoData') }}</td>
+          <tr role="row" v-if="error" class="inandu-grid-error-row">
+            <td role="gridcell" :colspan="totalColumnCount">{{ error }}</td>
+          </tr>
+          <tr role="row" v-else-if="loading" class="inandu-grid-loading-row">
+            <td role="gridcell" :colspan="totalColumnCount">{{ t('MsgLoading') }}</td>
+          </tr>
+          <tr role="row" v-else-if="isEmpty">
+            <td role="gridcell" :colspan="totalColumnCount">{{ t('MsgNoData') }}</td>
           </tr>
           <!--
             One tree-data row — display + expand only (no inline editing, drag-reorder or clipboard, same
@@ -726,14 +870,14 @@ const rowCtx = computed<RowContext>(() => ({
             expand/collapse toggle when the node has children. Same layout as grid-angular's `#treeRow` template.
           -->
           <template v-else-if="grid.hasTreeData">
-            <tr
+            <tr role="row"
               v-for="(node, index) in grid.treeRows"
               :key="rowKey(node.row)"
               :aria-selected="selectable ? grid.isRowSelected(node.row) : undefined"
               :aria-level="node.depth + 1"
               :aria-expanded="node.expandable ? grid.isTreeRowExpanded(node.row) : undefined"
             >
-              <td v-if="selectable" :style="selectColumnStyle">
+              <td role="gridcell" v-if="selectable" :style="selectColumnStyle">
                 <input
                   :aria-label="t('MsgSelectRow', { index: index + 1 })"
                   type="checkbox"
@@ -741,7 +885,7 @@ const rowCtx = computed<RowContext>(() => ({
                   @change="grid.toggleRowSelection(node.row)"
                 />
               </td>
-              <td v-for="(column, colIndex) in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
+              <td role="gridcell" v-for="(column, colIndex) in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
                 <span v-if="colIndex === 0" class="inandu-grid-tree-cell" :style="{ paddingInlineStart: `${node.depth * 16}px` }">
                   <button
                     v-if="node.expandable"
@@ -758,14 +902,14 @@ const rowCtx = computed<RowContext>(() => ({
                 </span>
                 <RenderNodes v-else :nodes="cellContent(column, node.row)" />
               </td>
-              <td v-if="hasRowActions" class="inandu-grid-row-actions" />
+              <td role="gridcell" v-if="hasRowActions" class="inandu-grid-row-actions" />
             </tr>
           </template>
           <!-- One group header row (key + row count + per-aggregate-column labels) followed by its own data rows. -->
           <template v-else-if="grid.groups">
             <template v-for="group in grid.groups" :key="group.key">
-              <tr class="inandu-grid-group-row">
-                <td :colspan="totalColumnCount">
+              <tr role="row" class="inandu-grid-group-row">
+                <td role="gridcell" :colspan="totalColumnCount">
                   <strong>{{ group.key }}</strong> ({{ group.rows.length }})
                   <span v-if="aggregateColumns.length > 0" class="inandu-grid-group-aggregates">
                     <span v-for="column in aggregateColumns" :key="column.field"> · {{ aggregateLabel(column, group.aggregates) }}</span>
@@ -782,8 +926,8 @@ const rowCtx = computed<RowContext>(() => ({
             </template>
           </template>
           <template v-else>
-            <tr v-if="grid.hasVirtualScroll && topSpacerHeight > 0" aria-hidden="true">
-              <td :style="{ height: `${topSpacerHeight}px`, padding: 0, border: 'none' }" :colspan="totalColumnCount" />
+            <tr role="row" v-if="grid.hasVirtualScroll && topSpacerHeight > 0" aria-hidden="true">
+              <td role="gridcell" :style="{ height: `${topSpacerHeight}px`, padding: 0, border: 'none' }" :colspan="totalColumnCount" />
             </tr>
             <DataRow
               v-for="(row, offset) in windowedRows"
@@ -801,20 +945,31 @@ const rowCtx = computed<RowContext>(() => ({
               @row-drop="grid.onRowDrop(row)"
               @toggle-expanded="grid.toggleRowExpanded(row)"
             />
-            <tr v-if="grid.hasVirtualScroll && bottomSpacerHeight > 0" aria-hidden="true">
-              <td :style="{ height: `${bottomSpacerHeight}px`, padding: 0, border: 'none' }" :colspan="totalColumnCount" />
+            <tr role="row" v-if="grid.hasVirtualScroll && bottomSpacerHeight > 0" aria-hidden="true">
+              <td role="gridcell" :style="{ height: `${bottomSpacerHeight}px`, padding: 0, border: 'none' }" :colspan="totalColumnCount" />
             </tr>
           </template>
         </tbody>
-        <tfoot v-if="aggregateColumns.length > 0 && !grid.hasVirtualScroll">
-          <tr class="inandu-grid-totals-row">
-            <td v-if="hasMasterDetail" />
-            <td v-if="hasRowDragHandle" />
-            <td v-if="selectable" :style="selectColumnStyle" />
-            <td v-for="column in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
+        <tbody v-if="pinnedBottomRows.length > 0 && !grid.hasVirtualScroll" class="inandu-grid-pinned inandu-grid-pinned-bottom">
+          <tr v-for="(pinned, index) in pinnedBottomRows" :key="`bottom-${index}`" role="row" class="inandu-grid-pinned-row">
+            <td v-if="hasMasterDetail" role="gridcell" />
+            <td v-if="hasRowDragHandle" role="gridcell" />
+            <td v-if="selectable" role="gridcell" :style="selectColumnStyle" />
+            <td v-for="column in grid.visibleColumns" :key="column.field" role="gridcell" tabindex="-1" :style="columnStyle(column)">
+              <RenderNodes :nodes="cellContent(column, pinned)" />
+            </td>
+            <td v-if="hasRowActions" role="gridcell" />
+          </tr>
+        </tbody>
+        <tfoot v-if="showTotals && aggregateColumns.length > 0 && !grid.hasVirtualScroll">
+          <tr role="row" class="inandu-grid-totals-row">
+            <td role="gridcell" v-if="hasMasterDetail" />
+            <td role="gridcell" v-if="hasRowDragHandle" />
+            <td role="gridcell" v-if="selectable" :style="selectColumnStyle" />
+            <td role="gridcell" v-for="column in grid.visibleColumns" :key="column.field" :style="columnStyle(column)">
               {{ column.aggregate ? aggregateLabel(column, grid.totals) : '' }}
             </td>
-            <td v-if="hasRowActions" />
+            <td role="gridcell" v-if="hasRowActions" />
           </tr>
         </tfoot>
       </table>

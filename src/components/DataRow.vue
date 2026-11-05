@@ -58,7 +58,7 @@ function onCellMouseEnter(colIndex: number) {
 </script>
 
 <template>
-  <tr
+  <tr role="row"
     :data-row-index="rowIndex"
     :aria-selected="ctx.selectable ? ctx.isRowSelected(row) : undefined"
     :class="isDragOverRow ? 'inandu-drag-over' : undefined"
@@ -66,7 +66,7 @@ function onCellMouseEnter(colIndex: number) {
     @dragleave="hasRowDragHandle && emit('rowDragLeave')"
     @drop="onDrop"
   >
-    <td v-if="hasMasterDetail">
+    <td role="gridcell" v-if="hasMasterDetail">
       <button
         type="button"
         class="inandu-grid-detail-toggle"
@@ -77,10 +77,10 @@ function onCellMouseEnter(colIndex: number) {
         {{ isRowExpanded ? '▾' : '▸' }}
       </button>
     </td>
-    <td v-if="hasRowDragHandle">
+    <td role="gridcell" v-if="hasRowDragHandle">
       <span class="inandu-grid-row-drag-handle" :aria-label="ctx.t('MsgDragRow')" draggable="true" @dragstart="onHandleDragStart">⋮⋮</span>
     </td>
-    <td v-if="ctx.selectable" :style="ctx.selectColumnStyle">
+    <td role="gridcell" v-if="ctx.selectable" :style="ctx.selectColumnStyle">
       <input
         :aria-label="ctx.t('MsgSelectRow', { index: rowIndex + 1 })"
         type="checkbox"
@@ -88,12 +88,12 @@ function onCellMouseEnter(colIndex: number) {
         @change="ctx.toggleRowSelection(row)"
       />
     </td>
-    <td
+    <td role="gridcell"
       v-for="(column, colIndex) in ctx.columns"
       :key="column.field"
       :style="ctx.columnStyle(column)"
       :data-field="column.field"
-      :tabindex="ctx.clipboard ? 0 : undefined"
+      tabindex="-1"
       :class="ctx.cellRangeSelection && ctx.isCellInRange(rowIndex, colIndex) ? 'inandu-cell-range-selected' : undefined"
       @mousedown="onCellMouseDown($event, colIndex)"
       @mouseenter="onCellMouseEnter(colIndex)"
@@ -111,7 +111,7 @@ function onCellMouseEnter(colIndex: number) {
       </template>
       <RenderNodes v-else :nodes="ctx.cellContent(column, row)" />
     </td>
-    <td v-if="ctx.hasRowActions" class="inandu-grid-row-actions">
+    <td role="gridcell" v-if="ctx.hasRowActions" class="inandu-grid-row-actions">
       <template v-if="editing">
         <button type="button" :disabled="ctx.isValidating" @click="ctx.saveRow(row)">{{ ctx.t('MsgSaveRow') }}</button>
         <button type="button" :disabled="ctx.isValidating" @click="ctx.cancelRowEdit()">{{ ctx.t('MsgCancelRowEdit') }}</button>
@@ -126,8 +126,8 @@ function onCellMouseEnter(colIndex: number) {
       </template>
     </td>
   </tr>
-  <tr v-if="hasMasterDetail && isRowExpanded" class="inandu-grid-detail-row">
-    <td :colspan="ctx.columns.length + ctx.extraColumnCount">
+  <tr role="row" v-if="hasMasterDetail && isRowExpanded" class="inandu-grid-detail-row">
+    <td role="gridcell" :colspan="ctx.columns.length + ctx.extraColumnCount">
       <RenderNodes :nodes="ctx.detailContent(row)" />
     </td>
   </tr>
