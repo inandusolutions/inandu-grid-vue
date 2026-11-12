@@ -100,5 +100,9 @@
     "vitest": "^5.1.0",
     "vue": "^3.5.45",
     "vue-tsc": "^3.3.14"
+  },
+  "overrides": {
+    "editorconfig": { "minimatch": "^11.0.1" },
+    "glob": { "minimatch": "^11.0.1" }
   }
 }
