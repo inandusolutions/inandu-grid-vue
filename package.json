@@ -92,7 +92,7 @@
     "@testing-library/vue": "^8.1.0",
     "@vitejs/plugin-vue": "^6.0.11",
     "@vue/test-utils": "^2.5.1",
-    "jsdom": "^31.0.0",
+    "jsdom": "^31.0.1",
     "jspdf": "^4.2.1",
     "typescript": "~5.9.3",
     "vite": "^8.3.8",
