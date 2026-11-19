@@ -50,6 +50,33 @@ const columns: InanduGridColumn[] = [{ field: 'name', headerText: 'Name' }, { fi
 - **📦 [`@inandu-solutions/grid-vue` on npm](https://www.npmjs.com/package/@inandu-solutions/grid-vue)**
   (MIT) — `0.x` while the API settles; expect breaking changes between minors until `1.0.0`.
 
+## Use it with Nuxt
+
+The grid renders on the server and hydrates in the browser without extra setup. Checked with Nuxt 4.6 and `@inandu-solutions/grid-vue`
+0.5.2: the data is in the HTML the server sends, there are no hydration warnings, and sorting and filtering work in Chromium and Firefox.
+
+```bash
+npm install @inandu-solutions/grid-vue
+```
+
+```vue
+<!-- app/app.vue (or any page) -->
+<script setup lang="ts">
+import { InanduGrid, type InanduGridColumn } from '@inandu-solutions/grid-vue';
+import '@inandu-solutions/grid-vue/style.css';
+
+const rows = [{ name: 'Ada', age: 36 }, { name: 'Alan', age: 41 }];
+const columns: InanduGridColumn[] = [{ field: 'name', headerText: 'Name' }, { field: 'age', headerText: 'Age', type: 'number' }];
+</script>
+
+<template>
+  <InanduGrid :rows="rows" :columns="columns" :page-size="25" />
+</template>
+```
+
+- Import `style.css` where you use the grid (as above), or list it once in `css` in `nuxt.config.ts`.
+- If you want the grid to exist only in the browser (for example a table that reads `window`), wrap it in `<ClientOnly>`.
+
 ## Who is this for?
 
 - **CRUD / business apps** that need sortable, filterable, editable tables without pulling in a
