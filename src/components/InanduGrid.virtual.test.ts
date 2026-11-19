@@ -1,6 +1,7 @@
 import { fireEvent, render } from '@testing-library/vue';
 import { describe, expect, it } from 'vitest';
 import InanduGrid from './InanduGrid.vue';
+import type { InanduGridRow } from '@inandu-solutions/grid-vue';
 
 /** Virtual scroll with many rows (review point C2): data that arrives late, a viewport that is resized, scroll set from code. */
 const columns = [
@@ -9,12 +10,12 @@ const columns = [
 ];
 const make = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i + 1, name: `Person ${i + 1}` }));
 
-const body = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('tbody tr[data-row-index]'));
-const ids = (c: HTMLElement) => body(c).map(tr => Number(tr.getAttribute('data-row-index')) + 1);
-const viewport = (c: HTMLElement) => c.querySelector('.inandu-grid-viewport') as HTMLElement;
-const scrollTo = (c: HTMLElement, top: number) => fireEvent.scroll(viewport(c), { target: { scrollTop: top } });
+const body = (c: Element) => Array.from(c.querySelectorAll<HTMLElement>('tbody tr[data-row-index]'));
+const ids = (c: Element) => body(c).map(tr => Number(tr.getAttribute('data-row-index')) + 1);
+const viewport = (c: Element) => c.querySelector('.inandu-grid-viewport') as HTMLElement;
+const scrollTo = (c: Element, top: number) => fireEvent.scroll(viewport(c), { target: { scrollTop: top } });
 
-const props = (rows: object[], height = 200) => ({ rows, columns, virtualScroll: true, virtualRowHeight: 20, height, overscan: 2 });
+const props = (rows: InanduGridRow[], height = 200) => ({ rows, columns, virtualScroll: true, virtualRowHeight: 20, height, overscan: 2 });
 
 describe('virtual scroll: many rows', () => {
   it('mounts only the window for 20,000 rows, and a spacer stands for the rest', () => {
