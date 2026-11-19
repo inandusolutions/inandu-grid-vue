@@ -28,7 +28,7 @@ export const basicsColumns: InanduGridColumn[] = [
   { field: 'team', headerText: 'Team' },
   { field: 'role', headerText: 'Role' },
   { field: 'salary', headerText: 'Salary', type: 'number', format: '1.0-0', aggregate: 'avg' },
-  { field: 'joined', headerText: 'Joined', type: 'date', format: 'DD/MM/YYYY' },
+  { field: 'joined', headerText: 'Joined', type: 'date', format: 'YYYY-MM-DD' },
   { field: 'active', headerText: 'Active', type: 'boolean', format: 'Yes|No' },
 ];
 
@@ -76,5 +76,5 @@ export const orderColumns: InanduGridColumn[] = [
   { field: 'customer', headerText: 'Customer' },
   { field: 'status', headerText: 'Status' },
   { field: 'total', headerText: 'Total', type: 'number', format: '1.2-2' },
-  { field: 'placed', headerText: 'Placed', type: 'date', format: 'DD/MM/YYYY' },
+  { field: 'placed', headerText: 'Placed', type: 'date', format: 'YYYY-MM-DD' },
 ];

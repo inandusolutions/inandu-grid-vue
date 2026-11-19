@@ -88,7 +88,7 @@ function onKey(e: KeyboardEvent) {
       </div>
 
       <div class="explorer-actions">
-        <button v-if="active.demo" class="btn solid" type="button" @click="emit('open-demo', active.demo)">See it running ↑</button>
+        <button v-if="active.demo" class="btn solid" type="button" @click="emit('open-demo', active.demo)">Try the live demo ↑</button>
         <a class="btn" :href="readme(active.doc)">Read the docs →</a>
       </div>
     </div>
