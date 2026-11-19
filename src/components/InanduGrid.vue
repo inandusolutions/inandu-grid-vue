@@ -281,10 +281,20 @@ const dragOverRow = shallowRef<InanduGridRow | undefined>(undefined);
 const scrollTop = shallowRef(0);
 const tableRef = shallowRef<HTMLTableElement | null>(null);
 const viewportRef = shallowRef<HTMLElement | null>(null);
-/** A keyboard move to a row that is not mounted yet: the window scrolls there first, then this cell takes focus. */
-let pendingFocus: { row: number; col: number } | null = null;
-/** The cell that had focus when its row scrolled out of the virtual window: focus waits on the viewport and returns when the row is back. */
-let parkedFocus: { row: number; col: number } | null = null;
+/** How long a keyboard move to a row that is not rendered yet may wait for that row before it is forgotten (milliseconds). */
+const PENDING_FOCUS_TTL_MS = 1500;
+/**
+ * A keyboard move to a row that is not mounted yet: the window scrolls there first, then this cell takes focus. It is about the rows as
+ * they were (`rows`) and about the moment of the key press (`at`): it is dropped when the rows change, when it has waited too long, and
+ * when focus has gone somewhere else on the page, so it can never pull focus away later.
+ */
+let pendingFocus: { row: number; col: number; at: number; rows: readonly InanduGridRow[] } | null = null;
+/**
+ * The cell that had focus when its row scrolled out of the virtual window: focus waits on the viewport and returns when the row is back.
+ * The row is remembered by its key (`rowKey`: the `rowId` / `id` value, or a counter per row object when there is none), not by its
+ * position, so a sort or a filter while focus waits does not hand focus to a different record.
+ */
+let parkedFocus: { key: string; col: number } | null = null;
 
 // sort / filter / page notifications: only on a change, never for the initial state.
 watch(() => grid.sortCriteria, criteria => emit('sortChange', criteria));
@@ -477,23 +487,53 @@ function onViewportScroll(event: Event) {
   const end = Math.min(grid.visibleRows.length, Math.ceil((top + props.height) / props.virtualRowHeight) + props.overscan);
   if (index >= start && index < end) return;
   const col = Array.from(rowEl.querySelectorAll('[role="gridcell"]')).indexOf(active);
-  parkedFocus = { row: index, col: Math.max(0, col) };
+  const parkedRow = grid.visibleRows[index];
+  if (!parkedRow) return;
+  parkedFocus = { key: rowKey(parkedRow), col: Math.max(0, col) };
   viewport.focus({ preventScroll: true });
 }
 
-// After the window has re-rendered: a keyboard move that had to scroll first, or a focused cell that was parked on the viewport while its
-// row was out of the window, takes focus as soon as its row is mounted again.
+// After the window or the rows have changed and the DOM is updated: a keyboard move that had to scroll first, or a focused cell that was
+// parked on the viewport while its row was out of the window, takes focus as soon as its row is mounted.
 watch(
-  [windowStart, windowEnd],
+  [windowStart, windowEnd, () => grid.visibleRows],
   () => {
     if (!grid.hasVirtualScroll) return;
-    const wanted = pendingFocus ?? (document.activeElement === viewportRef.value ? parkedFocus : null);
-    if (!wanted) return;
-    const tr = tableRef.value?.querySelector(`tr[data-row-index="${wanted.row}"]`);
-    if (!tr) return;
-    pendingFocus = null;
+    const viewport = viewportRef.value;
+    const active = document.activeElement;
+    // Focus inside the grid, or on <body> (where it falls when the focused row unmounts), is the only state in which the grid may move it.
+    const focusInGrid = !active || active === document.body || active === viewport || !!viewport?.contains(active);
+
+    const pending = pendingFocus;
+    if (pending) {
+      if (pending.rows !== grid.visibleRows || Date.now() - pending.at > PENDING_FOCUS_TTL_MS || !focusInGrid) {
+        pendingFocus = null; // the rows changed, it waited too long, or the user went elsewhere: the request is moot
+      } else {
+        const tr = tableRef.value?.querySelector(`tr[data-row-index="${pending.row}"]`);
+        if (tr) {
+          pendingFocus = null;
+          parkedFocus = null;
+          focusCellOfRow(tr, pending.col);
+        }
+        return;
+      }
+    }
+
+    const parked = parkedFocus;
+    if (!parked) return;
+    if (active !== viewport) {
+      if (active && active !== document.body) parkedFocus = null; // focus has moved on by itself
+      return;
+    }
+    const index = grid.visibleRows.findIndex(row => rowKey(row) === parked.key);
+    if (index < 0) {
+      parkedFocus = null; // that record is gone (filtered out, removed): there is nothing to give focus back to
+      return;
+    }
+    const tr = tableRef.value?.querySelector(`tr[data-row-index="${index}"]`);
+    if (!tr) return; // its row is not in the window yet: keep waiting
     parkedFocus = null;
-    focusCellOfRow(tr, wanted.col);
+    focusCellOfRow(tr, parked.col);
   },
   { flush: 'post' },
 );
@@ -551,7 +591,7 @@ function handleVirtualNavigation(event: KeyboardEvent, rowEl: Element, col: numb
   }
   const viewport = viewportRef.value;
   if (!viewport) return true;
-  pendingFocus = { row: target, col };
+  pendingFocus = { row: target, col, at: Date.now(), rows: grid.visibleRows };
   viewport.scrollTop = Math.max(0, target * props.virtualRowHeight - props.height / 2);
   scrollTop.value = viewport.scrollTop;
   return true;
