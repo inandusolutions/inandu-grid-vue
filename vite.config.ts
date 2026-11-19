@@ -20,5 +20,14 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
+    // Measured 2026-11-19: statements 87.5, branches 82.1, functions 89.2, lines 89.1.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,vue}'],
+      exclude: ['src/**/*.test.*', 'src/test-setup.ts'],
+      reporter: ['text-summary', 'text'],
+      // A few points under what is measured today: a drop fails CI, normal change does not. Raise them when coverage rises.
+      thresholds: { statements: 84, branches: 79, functions: 86, lines: 86 },
+    },
   },
 });
