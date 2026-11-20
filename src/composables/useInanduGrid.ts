@@ -20,13 +20,15 @@ import {
   parseDraftValue,
   parsePastedCell,
   ALL_GRID_STATE_PARTS,
-  GRID_STATE_VERSION,
+  clearSavedGridState,
+  createDeleteConfirmation,
   InanduGridSavedState,
   InanduGridStatePart,
+  readSavedGridState,
   sanitizeGridState,
-  STATE_STORAGE_PREFIX,
   SELECT_COLUMN_WIDTH,
   TreeVisibleRow,
+  writeSavedGridState,
 } from '@inandu-solutions/grid-core';
 import { createTranslator } from '../utils/translate';
 
@@ -344,16 +346,9 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
     if (state.filterQuery !== undefined) filterQuery.value = state.filterQuery;
     if (state.columnFilters) filterValues.value = state.columnFilters;
   }
-  /** What is saved under `stateKey`, or `{}` when there is nothing, it cannot be read, or it is corrupt. */
+  /** What is saved under `stateKey` (`readSavedGridState` of grid-core): validated, `{}` when there is nothing, it cannot be read, or it is corrupt. */
   function readSavedState(): Partial<InanduGridSavedState> {
-    const key = stateKey.value;
-    if (!key || !hasStorage()) return {};
-    try {
-      const stored = localStorage.getItem(STATE_STORAGE_PREFIX + key);
-      return stored ? sanitizeGridState(JSON.parse(stored), persistParts.value) : {};
-    } catch {
-      return {};
-    }
+    return readSavedGridState(stateKey.value, persistParts.value);
   }
   /** A restore after mount (server-rendered pages): the grid has already drawn once with its defaults, so what changes now is not the user's doing. */
   function restoreAfterMount(): void {
@@ -386,10 +381,10 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
 
   watch([stateRestored, stateKey, persistParts, columnWidths, reorderedFields, hiddenFields, pinnedOverrides, sortCriteria, filterQuery, filterValues], () => {
     const key = stateKey.value;
-    if (!key || !stateRestored.value || !hasStorage()) return;
-    try {
-      const wanted = new Set(persistParts.value);
-      const state: Record<string, unknown> = {
+    if (!key || !stateRestored.value) return;
+    writeSavedGridState(
+      key,
+      {
         columnWidths: columnWidths.value,
         reorderedFields: reorderedFields.value ?? [],
         hiddenFields: Array.from(hiddenFields.value),
@@ -397,22 +392,14 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
         sortCriteria: sortCriteria.value,
         filterQuery: filterQuery.value,
         columnFilters: filterValues.value,
-      };
-      const saved = Object.fromEntries(Object.entries(state).filter(([part]) => wanted.has(part as InanduGridStatePart)));
-      localStorage.setItem(STATE_STORAGE_PREFIX + key, JSON.stringify({ v: GRID_STATE_VERSION, ...saved }));
-    } catch {
-      // Persistence is a convenience, not a guarantee.
-    }
+      },
+      persistParts.value,
+    );
   });
 
   /** Removes what `stateKey` saved from `localStorage`; the grid on screen keeps its state. A no-op without a `stateKey`. */
   function clearPersistedState(): void {
-    if (!stateKey.value) return;
-    try {
-      localStorage.removeItem(STATE_STORAGE_PREFIX + stateKey.value);
-    } catch {
-      // Nothing saved that could be cleared.
-    }
+    clearSavedGridState(stateKey.value);
   }
   // Keys of the tree nodes already offered the default expansion: a node is seeded once, when it first shows up.
   const treeSeen = new Set<unknown>();
@@ -1006,43 +993,11 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
     }
   }
 
-  /** `true` while a `confirmDelete` promise is waiting: a second click on a delete button then does nothing, instead of opening a second dialog. */
-  let confirmingDelete = false;
+  /** The confirmation step of a delete (`createDeleteConfirmation` of grid-core, the same in every grid); it remembers a pending answer, so it is one per grid. */
+  const deleteConfirmation = createDeleteConfirmation();
 
-  /**
-   * Runs `proceed` once the delete is confirmed: by `confirmDelete` if set, else by `window.confirm(message)` if there is a
-   * message, else at once. Everything stays synchronous unless `confirmDelete` returns a promise.
-   */
   function confirmThen(message: string | undefined, rows: InanduGridRow[], proceed: () => void): void {
-    const confirmFn = current().confirmDelete;
-    if (!confirmFn) {
-      if (message && (typeof window === 'undefined' || !window.confirm(message))) return;
-      proceed();
-      return;
-    }
-    if (confirmingDelete) return;
-    let answer: boolean | Promise<boolean>;
-    try {
-      answer = confirmFn(rows);
-    } catch (error) {
-      console.error('inandu-grid: confirmDelete threw; the delete was not confirmed.', error);
-      return;
-    }
-    if (typeof answer === 'boolean') {
-      if (answer) proceed();
-      return;
-    }
-    confirmingDelete = true;
-    answer.then(
-      confirmed => {
-        confirmingDelete = false;
-        if (confirmed) proceed();
-      },
-      (error: unknown) => {
-        confirmingDelete = false;
-        console.error('inandu-grid: confirmDelete rejected; the delete was not confirmed.', error);
-      },
-    );
+    deleteConfirmation.run({ confirmDelete: current().confirmDelete, message }, rows, proceed);
   }
 
   function deleteRow(row: InanduGridRow): void {

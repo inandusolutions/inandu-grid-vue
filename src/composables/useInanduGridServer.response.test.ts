@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { effectScope } from 'vue';
 import type { InanduGridServerQuery } from './useInanduGrid';
-import { parseServerResponse, useInanduGridServer } from './useInanduGridServer';
+import { useInanduGridServer } from './useInanduGridServer';
 
-/** What a server can answer that is not `{ data, total }`: it must show up as `error`, never as an empty grid. */
+/**
+ * What a server can answer that is not `{ data, total }`: it must show up as `error`, never as an empty grid. The rules of the check
+ * are `parseServerResponse` of grid-core (tested there); these tests are about what the data layer does with them.
+ */
 const query: InanduGridServerQuery = { page: 0, pageSize: 25, sortCriteria: [], filterValues: {}, filterQuery: '' };
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 const until = async (cond: () => boolean) => {
@@ -11,29 +14,6 @@ const until = async (cond: () => boolean) => {
   expect(cond()).toBe(true);
 };
 const inScope = <T>(fn: () => T) => effectScope().run(fn)!;
-
-describe('parseServerResponse', () => {
-  it('accepts { data, total }', () => {
-    expect(parseServerResponse({ data: [{ id: 1 }], total: 7 })).toEqual({ data: [{ id: 1 }], total: 7 });
-    expect(parseServerResponse({ data: [], total: 0 })).toEqual({ data: [], total: 0 });
-  });
-
-  it('takes a missing total to be the number of rows received', () => {
-    expect(parseServerResponse({ data: [{ id: 1 }, { id: 2 }] })).toEqual({ data: [{ id: 1 }, { id: 2 }], total: 2 });
-    expect(parseServerResponse({ data: [{ id: 1 }], total: null })).toEqual({ data: [{ id: 1 }], total: 1 });
-  });
-
-  it('throws with a message that says what was wrong', () => {
-    expect(() => parseServerResponse(null)).toThrowError(/got null/);
-    expect(() => parseServerResponse([1, 2])).toThrowError(/got an array/);
-    expect(() => parseServerResponse('x')).toThrowError(/got string/);
-    expect(() => parseServerResponse({})).toThrowError(/`data` to be an array, got nothing/);
-    expect(() => parseServerResponse({ data: { a: 1 } })).toThrowError(/`data` to be an array, got object/);
-    expect(() => parseServerResponse({ data: [], total: '5' })).toThrowError(/`total`/);
-    expect(() => parseServerResponse({ data: [], total: -1 })).toThrowError(/`total`/);
-    expect(() => parseServerResponse({ data: [], total: Infinity })).toThrowError(/`total`/);
-  });
-});
 
 describe('useInanduGridServer: replies of the wrong shape', () => {
   it('sets error and keeps the rows already shown', async () => {
