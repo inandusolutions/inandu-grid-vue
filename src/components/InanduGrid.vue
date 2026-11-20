@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, useSlots, watch, type CSSProperties, type VNodeChild } from 'vue';
-import type { InanduGridColumnFilterValue, InanduGridRow, InanduGridStatePart } from '../core';
-import { AGGREGATE_SYMBOLS, formatCellValue, MAX_COLUMN_WIDTH } from '../core';
+import type { InanduGridColumnFilterValue, InanduGridRow, InanduGridSavedState, InanduGridStatePart } from '@inandu-solutions/grid-core';
+import { AGGREGATE_SYMBOLS, formatCellValue, MAX_COLUMN_WIDTH } from '@inandu-solutions/grid-core';
 import {
   useInanduGrid,
   type InanduCellRenderContext,
@@ -74,6 +74,8 @@ const props = withDefaults(
     deleteConfirmMessage?: string;
     /** `window.confirm()`-gates the "Delete selected" bulk action (shown when `selectable && deletable` with at least one row selected). Unset: deletes immediately. */
     bulkDeleteConfirmMessage?: string;
+    /** Decides whether a delete goes ahead (sync or async), instead of `window.confirm()`: gets the row, or every selected row for the bulk delete. Set, it replaces both confirm messages. See `useInanduGrid`. */
+    confirmDelete?: (rows: InanduGridRow[]) => boolean | Promise<boolean>;
     /** Adds an "Add row" trigger with a blank draft row. Default: false. Has no effect unless at least one column is `editable`. */
     creatable?: boolean;
     /** Opts into `Ctrl+C`/`Ctrl+V` cell copy/paste (Excel-style TSV). Default: false. */
@@ -178,6 +180,8 @@ const props = withDefaults(
     stateKey?: string;
     /** Which parts of the state `stateKey` saves; all by default. Leave out `'filterQuery'` and `'columnFilters'` to keep typed text out of storage. */
     persist?: readonly InanduGridStatePart[];
+    /** The saved state to start from instead of reading `localStorage`: for server-rendered apps, so the first draw has it on both sides. See `useInanduGrid`. */
+    initialState?: Partial<InanduGridSavedState>;
     /** Rows shown above the data rows, outside of filtering, sorting, paging and totals (a summary row you computed yourself). Read-only. */
     pinnedTopRows?: InanduGridRow[];
     /** Rows shown below the data rows, with the same rules as `pinnedTopRows`. */
@@ -253,6 +257,7 @@ const grid = useInanduGrid(() => ({
   selectable: props.selectable,
   deleteConfirmMessage: props.deleteConfirmMessage,
   bulkDeleteConfirmMessage: props.bulkDeleteConfirmMessage,
+  confirmDelete: props.confirmDelete,
   onRowSave: event => emit('rowSave', event),
   onRowCreate: values => emit('rowCreate', values),
   onRowDelete: row => emit('rowDelete', row),
@@ -269,6 +274,7 @@ const grid = useInanduGrid(() => ({
   onQueryChange: query => emit('queryChange', query),
   stateKey: props.stateKey,
   persist: props.persist,
+  initialState: props.initialState,
 }));
 
 /** The headless engine driving this grid — the same object `useInanduGrid()` returns — so a parent holding a template ref can sort/filter/pin/export programmatically or hand it to a grid-pro add-on. */
@@ -296,16 +302,18 @@ let pendingFocus: { row: number; col: number; at: number; rows: readonly InanduG
  */
 let parkedFocus: { key: string; col: number } | null = null;
 
-// sort / filter / page notifications: only on a change, never for the initial state.
-watch(() => grid.sortCriteria, criteria => emit('sortChange', criteria));
-watch([() => grid.filterQuery, () => grid.filterValues], ([query, columnFilters]) => emit('filterChange', { query, columnFilters }));
-watch(() => grid.page, page => emit('pageChange', { page, pageSize: props.pageSize }));
-
-watch(
-  () => grid.selectedRows,
-  selected => emit('selectionChange', Array.from(selected)),
-  { immediate: true },
-);
+// sort / filter / page / selection notifications: only when the user acts, never for the initial state or for the saved state
+// being put back after mount (`grid.restoring`). A server-side consumer gets the restored query through `queryChange`.
+watch(() => grid.sortCriteria, criteria => {
+  if (!grid.restoring) emit('sortChange', criteria);
+});
+watch([() => grid.filterQuery, () => grid.filterValues], ([query, columnFilters]) => {
+  if (!grid.restoring) emit('filterChange', { query, columnFilters });
+});
+watch(() => grid.page, page => {
+  if (!grid.restoring) emit('pageChange', { page, pageSize: props.pageSize });
+});
+watch(() => grid.selectedRows, selected => emit('selectionChange', Array.from(selected)));
 
 // The resize handle's drag: mousemove/mouseup are tracked on `window` (not the handle itself),
 // since the pointer routinely leaves the handle and even the table while dragging — same reason

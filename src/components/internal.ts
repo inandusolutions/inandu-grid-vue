@@ -1,5 +1,5 @@
 import { defineComponent, type CSSProperties, type PropType, type VNodeChild } from 'vue';
-import type { InanduGridRow } from '../core';
+import type { InanduGridRow } from '@inandu-solutions/grid-core';
 import type { InanduGridColumn } from '../composables/useInanduGrid';
 import type { InanduGridMessageKey } from '../utils/translate';
 

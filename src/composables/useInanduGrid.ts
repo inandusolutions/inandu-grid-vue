@@ -1,6 +1,6 @@
 import { createRowKey, toVueKey } from './rowKey';
 import type { InanduGridRowId } from './rowKey';
-import { computed, getCurrentInstance, onMounted, shallowRef, toValue, watch, type MaybeRefOrGetter, type VNodeChild } from 'vue';
+import { computed, getCurrentInstance, nextTick, onMounted, shallowRef, toValue, watch, type MaybeRefOrGetter, type VNodeChild } from 'vue';
 import {
   ColumnConfig,
   collectTreeRows,
@@ -21,12 +21,13 @@ import {
   parsePastedCell,
   ALL_GRID_STATE_PARTS,
   GRID_STATE_VERSION,
+  InanduGridSavedState,
   InanduGridStatePart,
   sanitizeGridState,
   STATE_STORAGE_PREFIX,
   SELECT_COLUMN_WIDTH,
   TreeVisibleRow,
-} from '../core';
+} from '@inandu-solutions/grid-core';
 import { createTranslator } from '../utils/translate';
 
 /**
@@ -195,6 +196,13 @@ export interface UseInanduGridOptions {
   deleteConfirmMessage?: string;
   /** `window.confirm()`-gates `deleteSelectedRows()`. Unset: deletes immediately. */
   bulkDeleteConfirmMessage?: string;
+  /**
+   * Decides whether a delete goes ahead, so an app can show its own dialog instead of `window.confirm()`: it gets the row (or every
+   * selected row, for the bulk delete) and returns `true`, or a promise of `true`, to confirm. Set, it replaces both confirm
+   * messages. A rejection or a throw counts as not confirmed; a second click while a promise is pending is ignored. Without a
+   * browser (server rendering) a confirm message cannot be asked, so nothing is deleted.
+   */
+  confirmDelete?: (rows: InanduGridRow[]) => boolean | Promise<boolean>;
   /** Called by `saveRow()` once validation passes — the grid never mutates `rows` itself; applying the change is the caller's job. */
   onRowSave?: (event: InanduGridRowSave) => void;
   /** Called by `saveNewRow()` once validation passes. No row reference — it doesn't exist in `rows` yet. */
@@ -249,11 +257,18 @@ export interface UseInanduGridOptions {
   onQueryChange?: (query: InanduGridServerQuery) => void;
   /**
    * When set, saves column widths/order/visibility/pins, sort and filters to `localStorage` under this key and restores
-   * them the next time a grid with the same key mounts (after mount, so server and client markup match). Unset: nothing is saved.
+   * them the next time a grid with the same key mounts: while it is set up, so the first draw already has them (a page being
+   * hydrated waits for the mount instead, so server and client markup match; see `initialState`). Unset: nothing is saved.
    */
   stateKey?: string;
   /** Which parts of the state `stateKey` saves and restores; all by default. Leave out `'filterQuery'` and `'columnFilters'` to keep what was typed out of storage. */
   persist?: readonly InanduGridStatePart[];
+  /**
+   * The saved state to start from, instead of reading `localStorage` (same shape `stateKey` saves; parts that are missing or invalid
+   * are ignored). For server-rendered apps: pass what the server knows and the first draw, on the server and on the client, already
+   * has it, with no jump after mount. Changes made after that are saved under `stateKey` as usual.
+   */
+  initialState?: Partial<InanduGridSavedState>;
 }
 
 /**
@@ -317,33 +332,61 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
   const stateKey = computed(() => toValue(options).stateKey ?? '');
   const persistParts = computed(() => toValue(options).persist ?? ALL_GRID_STATE_PARTS);
   const stateRestored = shallowRef(false);
-  function restoreState(): void {
+  /** `true` from the moment a restore after mount applies the saved state until the watchers it wakes have run: what they see is the restore, not the user acting. */
+  const restoring = shallowRef(false);
+  const hasStorage = (): boolean => typeof localStorage !== 'undefined';
+  function applyState(state: Partial<InanduGridSavedState>): void {
+    if (state.columnWidths) columnWidths.value = state.columnWidths;
+    if (state.reorderedFields) reorderedFields.value = state.reorderedFields;
+    if (state.hiddenFields) hiddenFields.value = new Set(state.hiddenFields);
+    if (state.pinnedOverrides) pinnedOverrides.value = state.pinnedOverrides;
+    if (state.sortCriteria) sortCriteria.value = state.sortCriteria;
+    if (state.filterQuery !== undefined) filterQuery.value = state.filterQuery;
+    if (state.columnFilters) filterValues.value = state.columnFilters;
+  }
+  /** What is saved under `stateKey`, or `{}` when there is nothing, it cannot be read, or it is corrupt. */
+  function readSavedState(): Partial<InanduGridSavedState> {
     const key = stateKey.value;
-    if (key) {
-      try {
-        const stored = localStorage.getItem(STATE_STORAGE_PREFIX + key);
-        if (stored) {
-          const state = sanitizeGridState(JSON.parse(stored), persistParts.value);
-          if (state.columnWidths) columnWidths.value = state.columnWidths;
-          if (state.reorderedFields) reorderedFields.value = state.reorderedFields;
-          if (state.hiddenFields) hiddenFields.value = new Set(state.hiddenFields);
-          if (state.pinnedOverrides) pinnedOverrides.value = state.pinnedOverrides;
-          if (state.sortCriteria) sortCriteria.value = state.sortCriteria;
-          if (state.filterQuery !== undefined) filterQuery.value = state.filterQuery;
-          if (state.columnFilters) filterValues.value = state.columnFilters;
-        }
-      } catch {
-        // Corrupt state or no storage access: start fresh.
-      }
+    if (!key || !hasStorage()) return {};
+    try {
+      const stored = localStorage.getItem(STATE_STORAGE_PREFIX + key);
+      return stored ? sanitizeGridState(JSON.parse(stored), persistParts.value) : {};
+    } catch {
+      return {};
     }
+  }
+  /** A restore after mount (server-rendered pages): the grid has already drawn once with its defaults, so what changes now is not the user's doing. */
+  function restoreAfterMount(): void {
+    restoring.value = true;
+    applyState(readSavedState());
+    stateRestored.value = true;
+    void nextTick(() => {
+      restoring.value = false;
+    });
+  }
+  // Restore while the grid is set up, so the first draw already has the saved sort, filters and widths (no jump, and in
+  // server mode a single request, with the saved query). Two cases wait for the mount instead: a page that is being
+  // hydrated (what the server drew had the defaults, the client must start from the same markup), and a grid created
+  // where there is no storage yet (the server). `initialState` is the same on server and client, so it is always applied now.
+  const initialState = toValue(options).initialState;
+  // Vue gives a component the DOM node it is hydrating (`vnode.el`) before its setup runs; a plain mount has none yet.
+  const hydrating = !!getCurrentInstance()?.vnode.el;
+  if (initialState) {
+    applyState(sanitizeGridState(initialState, persistParts.value));
+    stateRestored.value = true;
+  } else if (hasStorage() && !hydrating) {
+    applyState(readSavedState());
+    stateRestored.value = true;
+  } else if (getCurrentInstance()) {
+    onMounted(restoreAfterMount);
+  } else {
+    applyState(readSavedState());
     stateRestored.value = true;
   }
-  if (getCurrentInstance()) onMounted(restoreState);
-  else restoreState();
 
   watch([stateRestored, stateKey, persistParts, columnWidths, reorderedFields, hiddenFields, pinnedOverrides, sortCriteria, filterQuery, filterValues], () => {
     const key = stateKey.value;
-    if (!key || !stateRestored.value) return;
+    if (!key || !stateRestored.value || !hasStorage()) return;
     try {
       const wanted = new Set(persistParts.value);
       const state: Record<string, unknown> = {
@@ -963,18 +1006,55 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
     }
   }
 
+  /** `true` while a `confirmDelete` promise is waiting: a second click on a delete button then does nothing, instead of opening a second dialog. */
+  let confirmingDelete = false;
+
+  /**
+   * Runs `proceed` once the delete is confirmed: by `confirmDelete` if set, else by `window.confirm(message)` if there is a
+   * message, else at once. Everything stays synchronous unless `confirmDelete` returns a promise.
+   */
+  function confirmThen(message: string | undefined, rows: InanduGridRow[], proceed: () => void): void {
+    const confirmFn = current().confirmDelete;
+    if (!confirmFn) {
+      if (message && (typeof window === 'undefined' || !window.confirm(message))) return;
+      proceed();
+      return;
+    }
+    if (confirmingDelete) return;
+    let answer: boolean | Promise<boolean>;
+    try {
+      answer = confirmFn(rows);
+    } catch (error) {
+      console.error('inandu-grid: confirmDelete threw; the delete was not confirmed.', error);
+      return;
+    }
+    if (typeof answer === 'boolean') {
+      if (answer) proceed();
+      return;
+    }
+    confirmingDelete = true;
+    answer.then(
+      confirmed => {
+        confirmingDelete = false;
+        if (confirmed) proceed();
+      },
+      (error: unknown) => {
+        confirmingDelete = false;
+        console.error('inandu-grid: confirmDelete rejected; the delete was not confirmed.', error);
+      },
+    );
+  }
+
   function deleteRow(row: InanduGridRow): void {
-    const message = current().deleteConfirmMessage;
-    if (message && !window.confirm(message)) return;
-    current().onRowDelete?.(row);
+    confirmThen(current().deleteConfirmMessage, [row], () => current().onRowDelete?.(row));
   }
 
   function deleteSelectedRows(): void {
-    const message = current().bulkDeleteConfirmMessage;
-    if (message && !window.confirm(message)) return;
     const selected = Array.from(selectedRows.value);
-    clearSelection();
-    current().onRowsDelete?.(selected);
+    confirmThen(current().bulkDeleteConfirmMessage, selected, () => {
+      clearSelection();
+      current().onRowsDelete?.(selected);
+    });
   }
 
   function startAddingRow(): void {
@@ -1226,6 +1306,10 @@ export function useInanduGrid(options: MaybeRefOrGetter<UseInanduGridOptions>) {
     },
     setSort,
     clearPersistedState,
+    /** `true` while a restore after mount is being applied: what the sort, filter and page watchers see then is not the user acting. */
+    get restoring() {
+      return restoring.value;
+    },
     toggleSort,
     sortDirectionFor,
     sortPriorityFor,

@@ -74,6 +74,7 @@
     "e2e:all": "playwright test",
     "api:check": "node scripts/api-snapshot.mjs",
     "api:update": "node scripts/api-snapshot.mjs --update",
+    "check:css-sync": "node scripts/check-css-sync.mjs",
     "check:package": "node scripts/check-package.mjs",
     "smoke:package": "node scripts/smoke-package.mjs",
     "check:dts": "tsc --noEmit --skipLibCheck false --strict --target es2022 --module esnext --moduleResolution bundler dist/index.d.ts"

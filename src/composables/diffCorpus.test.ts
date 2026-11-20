@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import corpus from './contract/diff-corpus.json';
 import { useInanduGrid } from './useInanduGrid';
-import type { InanduColumnType, InanduGridColumnFilterValue } from '../core';
+import type { InanduColumnType, InanduGridColumnFilterValue } from '@inandu-solutions/grid-core';
 
 /**
  * The differential corpus: the same rows and requests are run through grid-core, grid-angular, grid-react, grid-vue and
