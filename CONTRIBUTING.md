@@ -15,7 +15,6 @@
 | Path | What it is |
 | --- | --- |
 | `src/` | The library — published to npm as `@inandu-solutions/grid-vue`. |
-| `src/core/` | Re-exports `@inandu-solutions/grid-core`, the framework-agnostic logic shared with grid-angular and grid-react. |
 | `src/composables/` | `useInanduGrid()`, the headless engine. |
 | `src/components/` | `<InanduGrid>` and its internal row/cell SFCs. |
 | `site/` | The GitHub Pages demo/landing site. A separate npm project, not part of the library build. |
@@ -40,6 +39,7 @@ npm run build        # library build -> dist/ (also copies dist/style.css)
 npm run api:check    # after build: the exported API matches api/public-api.txt
 npm run api:update   # rewrite that snapshot (review the diff: it is the API change of the release)
 npm run check:package    # after build: jspdf on demand, size budgets, tarball contents, entry points
+npm run check:css-sync   # the stylesheet matches grid-react's (names set aside); run it before a PR that touches src/styles/inandu-grid.css
 npm run smoke:package    # after build: install the packed tarball in an empty project and type-check a consumer
 ```
 

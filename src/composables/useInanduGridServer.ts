@@ -1,6 +1,6 @@
 import { onScopeDispose, shallowRef, toValue, watch, type MaybeRefOrGetter, type ShallowRef } from 'vue';
-import { hasMeaningfulFilterValue } from '../core';
-import type { InanduGridRow } from '../core';
+import { hasMeaningfulFilterValue } from '@inandu-solutions/grid-core';
+import type { InanduGridRow } from '@inandu-solutions/grid-core';
 import type { InanduGridServerQuery } from './useInanduGrid';
 
 const warnedExtraParams = new Set<string>();
@@ -84,6 +84,31 @@ export interface InanduGridServerOptions extends InanduGridQueryOptions {
   fetcher?: (url: string, init: RequestInit) => Promise<Response>;
   /** Wait this long after the last change before requesting (typing in the search box). The first request is never delayed. Default: 200. */
   debounceMs?: number;
+  /**
+   * Turns the parsed JSON body into `{ data, total }` when the server answers with another shape (`{ items, count }`, say).
+   * Its result is checked like a plain `{ data, total }` body. Unset: the body is expected to be `{ data, total }` already.
+   */
+  mapResponse?: (body: unknown) => { data: InanduGridRow[]; total?: number };
+}
+
+/**
+ * Checks a server reply and returns its rows and total. `data` must be an array, and `total`, when present, a finite number of
+ * 0 or more; a missing `total` is taken to be the number of rows received. Anything else throws an error that says what was
+ * wrong, so a wrong shape shows up as `error` instead of quietly as an empty grid.
+ */
+export function parseServerResponse(body: unknown): { data: InanduGridRow[]; total: number } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new Error(`Unexpected server response: expected an object like { data, total }, got ${Array.isArray(body) ? 'an array' : body === null ? 'null' : typeof body}.`);
+  }
+  const { data, total } = body as { data?: unknown; total?: unknown };
+  if (!Array.isArray(data)) {
+    throw new Error(`Unexpected server response: expected \`data\` to be an array, got ${data === undefined ? 'nothing' : typeof data}.`);
+  }
+  if (total === undefined || total === null) return { data: data as InanduGridRow[], total: data.length };
+  if (typeof total !== 'number' || !Number.isFinite(total) || total < 0) {
+    throw new Error(`Unexpected server response: expected \`total\` to be a number of 0 or more, got ${JSON.stringify(total)}.`);
+  }
+  return { data: data as InanduGridRow[], total };
 }
 
 export interface InanduGridServerResult {
@@ -113,7 +138,8 @@ export interface InanduGridServerResult {
  * `options` may be a plain object, a ref or a getter; `url` and `extraParams` are read on every request, and
  * changing them requests the current query again.
  *
- * Expects the `Inandu.Grid.Extensions` response shape, `{ data: [...], total: n }`. A request that
+ * Expects the `Inandu.Grid.Extensions` response shape, `{ data: [...], total: n }` (or map another shape with `mapResponse`); a reply
+ * of any other shape sets `error` and keeps the rows already shown. A request that
  * is superseded by a newer one is aborted, and a late response from it is ignored.
  */
 export function useInanduGridServer(optionsSource: MaybeRefOrGetter<InanduGridServerOptions>): InanduGridServerResult {
@@ -143,10 +169,11 @@ export function useInanduGridServer(optionsSource: MaybeRefOrGetter<InanduGridSe
         const requestInit: RequestInit = { ...options.init, signal: controller.signal };
         const response = await (options.fetcher ?? fetch)(target, requestInit);
         if (!response.ok) throw new Error(`Request failed: ${response.status} ${response.statusText}`);
-        const body = (await response.json()) as { data?: InanduGridRow[]; total?: number };
+        const body: unknown = await response.json();
         if (controller.signal.aborted) return;
-        rows.value = body.data ?? [];
-        total.value = body.total ?? 0;
+        const parsed = parseServerResponse(options.mapResponse ? options.mapResponse(body) : body);
+        rows.value = parsed.data;
+        total.value = parsed.total;
       } catch (e) {
         if (controller.signal.aborted) return;
         error.value = e instanceof Error ? e : new Error(String(e));

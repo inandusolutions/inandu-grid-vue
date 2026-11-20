@@ -1,7 +1,7 @@
 import { fireEvent, render } from '@testing-library/vue';
 import { describe, expect, it } from 'vitest';
 import InanduGrid from './InanduGrid.vue';
-import type { InanduGridRow } from '../core';
+import type { InanduGridRow } from '@inandu-solutions/grid-core';
 
 /** Virtual scroll with many rows (review point C2): data that arrives late, a viewport that is resized, scroll set from code. */
 const columns = [

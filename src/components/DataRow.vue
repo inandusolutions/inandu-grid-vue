@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { InanduGridRow } from '../core';
+import type { InanduGridRow } from '@inandu-solutions/grid-core';
 import EditCell from './EditCell.vue';
 import { RenderNodes, type RowContext } from './internal';
 

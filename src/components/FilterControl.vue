@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { InanduGridColumnFilterValue } from '../core';
+import type { InanduGridColumnFilterValue } from '@inandu-solutions/grid-core';
 import type { InanduGridColumn } from '../composables/useInanduGrid';
 import type { Translator } from './internal';
 
