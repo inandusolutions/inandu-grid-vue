@@ -21,6 +21,7 @@ entries below start from the next release.
 - **Events:** `selectionChange` no longer fires with an empty selection when the grid mounts, and `sortChange`, `filterChange` and `pageChange` no longer fire when the state saved under `stateKey` is put back. They report what the user does. A server-side grid still gets the restored query once, through `queryChange`.
 - `useInanduGridServer` checks the reply: `data` must be an array and `total`, when present, a number of 0 or more. A wrong shape now sets `error` and keeps the rows on screen, where it used to show an empty grid with a total of 0. A reply without `total` takes the number of rows received as the total (it was 0).
 - The `src/core` folder that only re-exported `@inandu-solutions/grid-core` is gone; the source imports the package directly. No change for users of the package.
+- Needs `@inandu-solutions/grid-core` `^0.1.6` (was `^0.1.5`). The saved state under `stateKey`, the delete confirmation (`confirmDelete`, `deleteConfirmMessage`) and the check of a server reply now run on `grid-core`'s `readSavedGridState` / `writeSavedGridState` / `clearSavedGridState`, `createDeleteConfirmation` and `parseServerResponse`, the code grid-angular and grid-react use too. No change in behaviour.
 
 ### Fixed
 
